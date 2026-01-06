@@ -1,8 +1,8 @@
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
-  name: TEST_COMP_NEW_LEANIX
-  title: TEST_COMP_NEW_LEANIX
+  name: TEST_COMP_NEW_LEANIX01
+  title: TEST_COMP_NEW_LEANIX01
   description: 'TEST '
   tags: []
 spec:
