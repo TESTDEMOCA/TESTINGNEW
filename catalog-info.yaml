@@ -1,18 +1,26 @@
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
-  name: TEST_COMP_NEW_LEANIX01
-  title: TEST_COMP_NEW_LEANIX01
-  description: 'TEST '
-  tags: []
+  name: TEST_Component_1
+  title: TEST
+  description: dgvsfdgvsfdg
+  tags:
+    - odp-1.0
+  links:
+    - icon: leanix
+      title: Lean IX
+      url: >-
+        https://github.com/cariad-dxp/test-data/blob/main/nagarro/production-group.yaml
+  annotations: {}
 spec:
   owner: default/admins
-  lifecycle: development
+  lifecycle: production
   type: module
   providesApis: []
   consumesApis: []
   dependsOn: []
   dependencyOf: []
-  fullAccess: []
+  fullAccess:
+    - internal
   limitedAccess: []
   blockedAccess: []
