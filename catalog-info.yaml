@@ -1,26 +1,23 @@
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
-  name: TEST_Component_1
-  title: TEST
-  description: dgvsfdgvsfdg
-  tags:
-    - odp-1.0
-  links:
-    - icon: leanix
-      title: Lean IX
-      url: >-
-        https://github.com/cariad-dxp/test-data/blob/main/nagarro/production-group.yaml
-  annotations: {}
+  name: onboarding-test-component
+  title: Onboarding Test Component
+  description: This is a test component created during onboarding flow automation testing.
+  tags: []
+  annotations:
+    leanix-location: >-
+      https://eu-5.leanix.net/CARIADSandbox/factsheet/Application/dbc10e0f-7baf-428c-80c6-97016bfc8f78
+    source-code-repo: https://github.com/test/onboarding-test-component
 spec:
-  owner: default/admins
-  lifecycle: production
-  type: module
+  owner: default/acbu_device_group
+  lifecycle: deprecated
+  type: documentation
+  system: default/megatron
   providesApis: []
   consumesApis: []
   dependsOn: []
   dependencyOf: []
-  fullAccess:
-    - internal
+  fullAccess: []
   limitedAccess: []
   blockedAccess: []
