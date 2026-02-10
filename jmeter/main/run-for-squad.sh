@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# Start Enterprise load test for a given squad at 100% (your users); other squads run at 5% automatically.
-# Usage: run-for-squad.sh <squad> <users> [extra JMeter -J options...]
-# Example: run-for-squad.sh squad_a 10
-#   → primary.squad=squad_a, primary.threads=10, background.threads=1 (5% for others)
-# Generates HTML report and prints accumulated result summary (all squads).
-# For Copilot: "Start load test for squad-a with 10 users" → run this with squad_a 10.
+# Start Enterprise load test: one squad at 100% (primary users), others at a chosen % (background users).
+# Usage: run-for-squad.sh <squad> <primary_users> [background_users] [extra -J options...]
+#   background_users = thread count for non-primary squads (default 1). E.g. 10 for 10% when primary=100.
+# Example: run-for-squad.sh squad_b 100 10  → squad_b=100, others=10 each (10%). One report for all.
+# Example: run-for-squad.sh squad_b 100     → squad_b=100, others=1 each (default).
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -44,12 +43,21 @@ fi
 
 squad="${1:-}"
 users="${2:-10}"
+# Optional third arg: background thread count for other squads. If not a number, treat as first -J arg.
+if [[ "${3:-}" =~ ^[0-9]+$ ]]; then
+  background="${3}"
+  extra=("${@:4}")
+else
+  background="1"
+  extra=("${@:3}")
+fi
 
 if [ -z "$squad" ]; then
-  echo "Usage: $0 <squad> <users> [extra -J options...]"
+  echo "Usage: $0 <squad> <primary_users> [background_users] [extra -J options...]"
   echo "  squad: squad_a | squad_b | squad_c | squad_d"
-  echo "  users: primary squad thread count (100% for that squad); others get 5% (background.threads)"
-  echo "Example: $0 squad_a 10"
+  echo "  primary_users: thread count for primary squad (100%)"
+  echo "  background_users: thread count for other squads (e.g. 10 for 10% when primary=100). Default 1."
+  echo "Example: $0 squad_b 100 10   → squad_b=100, others=10 each. One report for all."
   exit 1
 fi
 
@@ -66,12 +74,12 @@ mkdir -p "$RESULTS_PATH"
 cd "$SCRIPT_DIR"
 
 echo "=============================================="
-echo "Enterprise load test – primary: $squad @ ${users} users (100%), others @ 5%"
+echo "Enterprise load test – primary: $squad @ ${users} users (100%), others @ ${background} each"
 echo "=============================================="
 echo "Results: $RESULTS_PATH"
 echo ""
 
-# Run Enterprise-Test.jmx with weight distribution: primary gets 100%, others 5%
+# Run Enterprise-Test.jmx: primary gets primary.threads, others get background.threads
 "$JMETER" -n \
   -t Enterprise-Test.jmx \
   -q "$PROPS" \
@@ -79,8 +87,8 @@ echo ""
   -j "$RESULTS_PATH/jmeter.log" \
   -Jprimary.squad="$squad" \
   -Jprimary.threads="$users" \
-  -Jbackground.threads=1 \
-  "${@:3}"
+  -Jbackground.threads="$background" \
+  "${extra[@]}"
 
 # Generate HTML report (accumulated result for all squads)
 echo ""
@@ -92,7 +100,7 @@ echo ""
 echo "=============================================="
 echo "Weight distribution (automatic)"
 echo "  Primary: $squad = ${users} threads (100%)"
-echo "  Others:  squad_a squad_b squad_c squad_d = 1 thread each (5%)"
+echo "  Others:  squad_a squad_b squad_c squad_d = ${background} thread(s) each"
 echo "=============================================="
 echo "Accumulated result summary (all squads)"
 echo "----------------------------------------"
