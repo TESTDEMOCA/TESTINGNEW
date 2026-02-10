@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Enterprise-Test" enabled="true">
+      <stringProp name="TestPlan.comments">Coordinated workload: one squad at 100% (primary.threads), others at 5% (background.threads). primary.squad sets which squad is primary. Logic: If primary.squad == SquadX then SquadX threads = full load, else SquadX threads = background load.</stringProp>
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <boolProp name="TestPlan.tearDown_on_shutdown">true</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="squad_a_threads" elementType="Argument">
+            <stringProp name="Argument.name">squad_a_threads</stringProp>
+            <stringProp name="Argument.value">${__jexl3("${__P(primary.squad)}" == "squad_a" ? ${__P(primary.threads,20)} : ${__P(background.threads,1)})}</stringProp>
+            <stringProp name="Argument.desc">If primary.squad==squad_a then primary.threads (100%), else background.threads (5%)</stringProp>
+          </elementProp>
+          <elementProp name="squad_b_threads" elementType="Argument">
+            <stringProp name="Argument.name">squad_b_threads</stringProp>
+            <stringProp name="Argument.value">${__jexl3("${__P(primary.squad)}" == "squad_b" ? ${__P(primary.threads,20)} : ${__P(background.threads,1)})}</stringProp>
+            <stringProp name="Argument.desc">If primary.squad==squad_b then primary.threads (100%), else background.threads (5%)</stringProp>
+          </elementProp>
+          <elementProp name="squad_c_threads" elementType="Argument">
+            <stringProp name="Argument.name">squad_c_threads</stringProp>
+            <stringProp name="Argument.value">${__jexl3("${__P(primary.squad)}" == "squad_c" ? ${__P(primary.threads,20)} : ${__P(background.threads,1)})}</stringProp>
+            <stringProp name="Argument.desc">If primary.squad==squad_c then primary.threads (100%), else background.threads (5%)</stringProp>
+          </elementProp>
+          <elementProp name="squad_d_threads" elementType="Argument">
+            <stringProp name="Argument.name">squad_d_threads</stringProp>
+            <stringProp name="Argument.value">${__jexl3("${__P(primary.squad)}" == "squad_d" ? ${__P(primary.threads,20)} : ${__P(background.threads,1)})}</stringProp>
+            <stringProp name="Argument.desc">If primary.squad==squad_d then primary.threads (100%), else background.threads (5%)</stringProp>
+          </elementProp>
+        </collectionProp>
+      </elementProp>
+    </TestPlan>
+    <hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Squad A" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">-1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">${squad_a_threads}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(rampup,10)}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <stringProp name="ThreadGroup.duration">${__P(duration,60)}</stringProp>
+        <stringProp name="ThreadGroup.delay">0</stringProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </ThreadGroup>
+      <hashTree>
+        <IfController guiclass="IfControllerGui" testclass="IfController" testname="If primary.squad == squad_a (100% load)" enabled="true">
+          <stringProp name="IfController.condition">${__jexl3("${__P(primary.squad)}" == "squad_a")}</stringProp>
+          <boolProp name="IfController.evaluate">true</boolProp>
+          <boolProp name="IfController.useExpression">true</boolProp>
+        </IfController>
+        <hashTree>
+          <IncludeController guiclass="IncludeControllerGui" testclass="IncludeController" testname="Include Squad A" enabled="true">
+            <stringProp name="IncludeController.includepath">../squads/squad-a/script-fragment.jmx</stringProp>
+          </IncludeController>
+          <hashTree/>
+        </hashTree>
+        <IfController guiclass="IfControllerGui" testclass="IfController" testname="Else squad_a at 5% (background)" enabled="true">
+          <stringProp name="IfController.condition">${__jexl3("${__P(primary.squad)}" != "squad_a")}</stringProp>
+          <boolProp name="IfController.evaluate">true</boolProp>
+          <boolProp name="IfController.useExpression">true</boolProp>
+        </IfController>
+        <hashTree>
+          <IncludeController guiclass="IncludeControllerGui" testclass="IncludeController" testname="Include Squad A" enabled="true">
+            <stringProp name="IncludeController.includepath">../squads/squad-a/script-fragment.jmx</stringProp>
+          </IncludeController>
+          <hashTree/>
+        </hashTree>
+      </hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Squad B" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">-1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">${squad_b_threads}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(rampup,10)}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <stringProp name="ThreadGroup.duration">${__P(duration,60)}</stringProp>
+        <stringProp name="ThreadGroup.delay">0</stringProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </ThreadGroup>
+      <hashTree>
+        <IfController guiclass="IfControllerGui" testclass="IfController" testname="If primary.squad == squad_b (100% load)" enabled="true">
+          <stringProp name="IfController.condition">${__jexl3("${__P(primary.squad)}" == "squad_b")}</stringProp>
+          <boolProp name="IfController.evaluate">true</boolProp>
+          <boolProp name="IfController.useExpression">true</boolProp>
+        </IfController>
+        <hashTree>
+          <IncludeController guiclass="IncludeControllerGui" testclass="IncludeController" testname="Include Squad B" enabled="true">
+            <stringProp name="IncludeController.includepath">../squads/squad-b/script-fragment.jmx</stringProp>
+          </IncludeController>
+          <hashTree/>
+        </hashTree>
+        <IfController guiclass="IfControllerGui" testclass="IfController" testname="Else squad_b at 5% (background)" enabled="true">
+          <stringProp name="IfController.condition">${__jexl3("${__P(primary.squad)}" != "squad_b")}</stringProp>
+          <boolProp name="IfController.evaluate">true</boolProp>
+          <boolProp name="IfController.useExpression">true</boolProp>
+        </IfController>
+        <hashTree>
+          <IncludeController guiclass="IncludeControllerGui" testclass="IncludeController" testname="Include Squad B" enabled="true">
+            <stringProp name="IncludeController.includepath">../squads/squad-b/script-fragment.jmx</stringProp>
+          </IncludeController>
+          <hashTree/>
+        </hashTree>
+      </hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Squad C" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">-1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">${squad_c_threads}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(rampup,10)}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <stringProp name="ThreadGroup.duration">${__P(duration,60)}</stringProp>
+        <stringProp name="ThreadGroup.delay">0</stringProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </ThreadGroup>
+      <hashTree>
+        <IfController guiclass="IfControllerGui" testclass="IfController" testname="If primary.squad == squad_c (100% load)" enabled="true">
+          <stringProp name="IfController.condition">${__jexl3("${__P(primary.squad)}" == "squad_c")}</stringProp>
+          <boolProp name="IfController.evaluate">true</boolProp>
+          <boolProp name="IfController.useExpression">true</boolProp>
+        </IfController>
+        <hashTree>
+          <IncludeController guiclass="IncludeControllerGui" testclass="IncludeController" testname="Include Squad C" enabled="true">
+            <stringProp name="IncludeController.includepath">../squads/squad-c/script-fragment.jmx</stringProp>
+          </IncludeController>
+          <hashTree/>
+        </hashTree>
+        <IfController guiclass="IfControllerGui" testclass="IfController" testname="Else squad_c at 5% (background)" enabled="true">
+          <stringProp name="IfController.condition">${__jexl3("${__P(primary.squad)}" != "squad_c")}</stringProp>
+          <boolProp name="IfController.evaluate">true</boolProp>
+          <boolProp name="IfController.useExpression">true</boolProp>
+        </IfController>
+        <hashTree>
+          <IncludeController guiclass="IncludeControllerGui" testclass="IncludeController" testname="Include Squad C" enabled="true">
+            <stringProp name="IncludeController.includepath">../squads/squad-c/script-fragment.jmx</stringProp>
+          </IncludeController>
+          <hashTree/>
+        </hashTree>
+      </hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Squad D" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">-1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">${squad_d_threads}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(rampup,10)}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <stringProp name="ThreadGroup.duration">${__P(duration,60)}</stringProp>
+        <stringProp name="ThreadGroup.delay">0</stringProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </ThreadGroup>
+      <hashTree>
+        <IfController guiclass="IfControllerGui" testclass="IfController" testname="If primary.squad == squad_d (100% load)" enabled="true">
+          <stringProp name="IfController.condition">${__jexl3("${__P(primary.squad)}" == "squad_d")}</stringProp>
+          <boolProp name="IfController.evaluate">true</boolProp>
+          <boolProp name="IfController.useExpression">true</boolProp>
+        </IfController>
+        <hashTree>
+          <IncludeController guiclass="IncludeControllerGui" testclass="IncludeController" testname="Include Squad D" enabled="true">
+            <stringProp name="IncludeController.includepath">../squads/squad-d/script-fragment.jmx</stringProp>
+          </IncludeController>
+          <hashTree/>
+        </hashTree>
+        <IfController guiclass="IfControllerGui" testclass="IfController" testname="Else squad_d at 5% (background)" enabled="true">
+          <stringProp name="IfController.condition">${__jexl3("${__P(primary.squad)}" != "squad_d")}</stringProp>
+          <boolProp name="IfController.evaluate">true</boolProp>
+          <boolProp name="IfController.useExpression">true</boolProp>
+        </IfController>
+        <hashTree>
+          <IncludeController guiclass="IncludeControllerGui" testclass="IncludeController" testname="Include Squad D" enabled="true">
+            <stringProp name="IncludeController.includepath">../squads/squad-d/script-fragment.jmx</stringProp>
+          </IncludeController>
+          <hashTree/>
+        </hashTree>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>

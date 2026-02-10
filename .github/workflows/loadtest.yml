@@ -1,0 +1,73 @@
+# Enterprise load test – run from pipeline (e.g. triggered by Copilot or manually).
+# One squad at 100% (your users), all others at 5%; weight distribution is automatic.
+# Accumulated results (all squads) are in the uploaded artifact.
+# No manual setup: Java and JMeter are installed in the job.
+
+name: Load Test (Enterprise)
+
+on:
+  workflow_dispatch:
+    inputs:
+      squad:
+        description: 'Primary squad (100% load)'
+        required: true
+        default: 'squad_a'
+        type: choice
+        options:
+          - squad_a
+          - squad_b
+          - squad_c
+          - squad_d
+      users:
+        description: 'Number of users (threads) for primary squad'
+        required: true
+        default: 10
+        type: number
+
+jobs:
+  loadtest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Apache JMeter
+        id: jmeter
+        run: |
+          JMETER_VERSION=5.6.3
+          JMETER_HOME="$RUNNER_TEMP/apache-jmeter-$JMETER_VERSION"
+          mkdir -p "$RUNNER_TEMP"
+          for i in 1 2 3; do
+            curl -fsSL "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-$JMETER_VERSION.tgz" -o "$RUNNER_TEMP/jmeter.tgz" && break
+            echo "Download attempt $i failed, retrying in 5s..."
+            sleep 5
+          done
+          tar -xzf "$RUNNER_TEMP/jmeter.tgz" -C "$RUNNER_TEMP"
+          echo "JMETER_HOME=$JMETER_HOME" >> $GITHUB_ENV
+          echo "$JMETER_HOME/bin" >> $GITHUB_PATH
+          echo "JMeter installed at $JMETER_HOME"
+
+      - name: Verify JMeter
+        run: |
+          echo "JMETER_HOME=$JMETER_HOME"
+          "$JMETER_HOME/bin/jmeter" -v
+
+      # JAVA_HOME is already set by "Set up Java"; JMETER_HOME by "Install Apache JMeter"
+      - name: Run Enterprise load test (primary = ${{ inputs.squad }}, users = ${{ inputs.users }})
+        env:
+          JMETER_HOME: ${{ env.JMETER_HOME }}
+        run: |
+          chmod +x jmeter/main/run-for-squad.sh
+          ./jmeter/main/run-for-squad.sh "${{ inputs.squad }}" "${{ inputs.users }}"
+
+      - name: Upload accumulated results (JTL, log, HTML report)
+        uses: actions/upload-artifact@v4
+        with:
+          name: loadtest-results-${{ inputs.squad }}-${{ inputs.users }}users
+          path: jmeter/results/

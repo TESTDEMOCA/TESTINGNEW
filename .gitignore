@@ -1,0 +1,7 @@
+# JMeter run outputs
+jmeter/results/*
+!jmeter/results/.gitkeep
+
+# JMeter dist in tools (pipeline downloads its own; local: extract here or set JMETER_HOME)
+jmeter/tools/apache-jmeter-*
+jmeter/tools/*.tgz
