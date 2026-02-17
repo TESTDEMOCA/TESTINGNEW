@@ -1,35 +1,123 @@
 apiVersion: backstage.io/v1alpha1
-kind: Component
+kind: Group
 metadata:
-  name: TEST_NEWENV_DEV_COMP
-  title: TEST_NEWENV_DEV_COMP
-  description: TESTING
+  name: TEST_GROUP_NEW_QA
+  title: TEST_GROUP_NEW_QA
+  description: TEST_GROUP_NEW_QA
   tags:
-    - mbb-1.5
-    - aeris
+    - data-platform
   links:
     - icon: catalog
-      title: TEST
-      url: https://dev.developer.cariad.digital/create-catalog
+      title: LINK
+      url: https://qa.developer.cariad.digital/create-catalog
+spec:
+  type: solution-train
+  profile:
+    displayName: TEST_GROUP_NEW_QA
+    email: diwakar.singh02@nagarro.com
+  parent: default/acbu_device_group
+  children:
+    - default/acbu_group
+  members:
+    - diwakar.singh02@nagarro.com
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: TEST_COMP_NEW_QA
+  title: TEST_COMP_NEW_QA
+  description: TEST_COMP_NEW_QA
+  tags:
+    - data-platform
   annotations:
     leanix-location: >-
       https://eu-5.leanix.net/CARIADSandbox/factsheet/Application/462a656f-9822-452a-80b2-c924b8413f7d
-    source-code-repo: https://dev.developer.cariad.digital/create-catalog
+    source-code-repo: https://qa.developer.cariad.digital/create-catalog
 spec:
-  owner: default/backstage-owners
-  lifecycle: deprecated
-  type: plugin
-  system: default/acbu-secops
-  subcomponentOf: default/about-my-car-fe
-  providesApis:
-    - default/bc68224f-03b1-4c42-9faa-a39e38e40111
-  consumesApis:
-    - default/connector-pdis
+  owner: default/acbu_group
+  lifecycle: testing
+  type: library
+  providesApis: []
+  consumesApis: []
+  dependsOn: []
+  dependencyOf: []
+  fullAccess:
+    - internal
+  limitedAccess: []
+  blockedAccess: []
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: TEST_API_NEW_QA
+  title: TEST_API_NEW_QA
+  description: TEST_API_NEW_QA
+  tags:
+    - hybrid-architecture
+  annotations:
+    leanix-location: >-
+      https://eu-5.leanix.net/CARIADSandbox/factsheet/Application/462a656f-9822-452a-80b2-c924b8413f7d
+    source-code-repo: >-
+      https://devstack.vwgroup.com/jira/secure/RapidBoard.jspa?rapidView=42739&projectKey=XLRTE&view=detail&selectedIssue=XLRTE-842#
+spec:
+  owner: default/nav-cde-stakeholders
+  lifecycle: testing
+  type: openapi
+  definition:
+    $text: ./test.yaml
+  fullAccess: []
+  limitedAccess: []
+  blockedAccess: []
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: TEST_SYSTEM_NEW_QA
+  title: TEST_SYSTEM_NEW_QA
+  description: TEST_SYSTEM_NEW_QA
+  tags: []
+  annotations:
+    leanix-location: >-
+      https://eu-5.leanix.net/CARIADSandbox/factsheet/Application/462a656f-9822-452a-80b2-c924b8413f7d
+    source-code-repo: https://qa.developer.cariad.digital/create-catalog
+  links:
+    - icon: confluence
+      title: Confluence
+      url: https://qa.developer.cariad.digital/create-catalog
+spec:
+  owner: default/nav-cde
+  type: product
+  fullAccess:
+    - contractor
+  limitedAccess: []
+  blockedAccess: []
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: TEST_RESOURCE_NEW_QA
+  title: TEST_RESOURCE_NEW_QA
+  description: TEST_RESOURCE_NEW_QA
+  tags:
+    - hybrid-architecture
+  links:
+    - icon: contact
+      title: Contact
+      url: https://diwakar.singh02@nagarro.com
+spec:
+  owner: default/nav-cde
+  lifecycle: production
+  type: kubernetes-cluster
+  system: default/megatron
   dependsOn:
     - component:default/caba4470-b570-4d61-9efe-49167640f86c
   dependencyOf:
-    - component:default/9917592d-e5ed-4a17-923b-7a3f73c2dcda
+    - component:default/about-my-car-fe
   fullAccess:
-    - internal
+    - acbu_device_group
   limitedAccess: []
   blockedAccess: []
