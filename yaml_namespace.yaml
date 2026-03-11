@@ -1,0 +1,21 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: Namespace_Test
+  title: Namespace_Test
+  description: Namespace_Test
+  tags:
+    - hybrid-architecture
+  annotations:
+    backstage.io/techdocs-ref: url:https://devstack.vwgroup.com/confluence/spaces/XLRTE/pages/2973662693/%F0%9F%A6%84+Product
+spec:
+  owner: admins
+  lifecycle: production
+  type: service
+  providesApis: []
+  consumesApis: []
+  dependsOn: []
+  dependencyOf: []
+  fullAccess: []
+  limitedAccess: []
+  blockedAccess: []
