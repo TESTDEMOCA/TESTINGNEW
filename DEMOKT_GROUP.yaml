@@ -16,3 +16,18 @@ spec:
   members:
     - sneha.dole@cognizant.com
     - diwakar.singh02@nagarro.com
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: DEMO_KT_SYSTEM
+  title: DEMO_KT_SYSTEM
+  description: DEMO_KT_SYSTEM
+  tags: []
+spec:
+  owner: default/DEMO_KT
+  type: product
+  fullAccess: []
+  limitedAccess: []
+  blockedAccess: []
