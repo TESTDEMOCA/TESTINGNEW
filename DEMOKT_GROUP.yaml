@@ -1,0 +1,18 @@
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: DEMO_KT
+  title: DEMO_KT
+  description: DEMO_KT
+  tags:
+    - data-platform
+  links: []
+spec:
+  type: business-unit
+  profile:
+    displayName: DEMO_KT
+    email: diwakar.singh02@nagarro.com
+  children: []
+  members:
+    - sneha.dole@cognizant.com
+    - diwakar.singh02@nagarro.com
