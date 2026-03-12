@@ -10,7 +10,7 @@ metadata:
 spec:
   type: business-unit
   profile:
-    displayName: DEMO_KT
+    displayName: DEMO_KT_NAME
     email: diwakar.singh02@nagarro.com
   children: []
   members:
