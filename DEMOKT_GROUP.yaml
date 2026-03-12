@@ -1,8 +1,8 @@
 apiVersion: backstage.io/v1alpha1
 kind: Group
 metadata:
-  name: DEMO_KT
-  title: DEMO_KT
+  name: DEMO_KT_NAME
+  title: DEMO_KT_NAME
   description: DEMO_KT
   tags:
     - data-platform
