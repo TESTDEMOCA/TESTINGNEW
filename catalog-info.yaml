@@ -1,30 +1,17 @@
 apiVersion: backstage.io/v1alpha1
-kind: Component
+kind: Group
 metadata:
-  name: test
-  title: TEst Comp
-  description: TEST COMP 01
+  name: Group_1
+  title: Test 123
+  description: Test 123
   tags:
-    - data-platform
-  links:
-    - icon: leanix
-      title: Lean IX
-      url: https://qa.developer.cariad.digital/create-catalog
+    - aeris
+  links: []
 spec:
-  owner: default/acbu_device_group
-  lifecycle: development
-  type: module
-  system: default/SPR
-  subcomponentOf: default/about-my-car-fe
-  providesApis:
-    - default/4e48fc58-870c-46b9-a5d2-61496ca7b2df
-  consumesApis:
-    - default/4a490838-2933-4508-8f22-8baaddf571ce
-  dependsOn:
-    - component:default/api-guardrails
-  dependencyOf:
-    - component:default/caba4470-b570-4d61-9efe-49167640f86c
-  fullAccess:
-    - diwakar.singh02@nagarro.com
-  limitedAccess: []
-  blockedAccess: []
+  type: art
+  profile:
+    displayName: Test 123
+    email: sneha.dole@cognizant.com
+  children: []
+  members:
+    - sneha.dole@cognizant.com
