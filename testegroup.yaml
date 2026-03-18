@@ -1,0 +1,17 @@
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: TEST_GROUP_KT_DEMO
+  title: TEST_GROUP_KT_DEMO
+  description: TEST_GROUP_KT_DEMO
+  tags: []
+  links: []
+spec:
+  type: art
+  profile:
+    displayName: TEST_GROUP_KT_DEMO
+    email: diwakar.singh02@nagarro.com
+  children: []
+  members:
+    - diwakar.singh02@nagarro.com
+    - Sneha.Dole@cognizant.com
