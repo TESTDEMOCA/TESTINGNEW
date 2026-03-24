@@ -1,0 +1,23 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: Component_Confluence_Test_New
+  title: Component_Confluence_Test_New
+  description: Component_Confluence_Test_New
+  tags:
+    - hybrid-architecture
+  links: []
+  annotations:
+    backstage.io/techdocs-ref: >-
+      url:https://devstack.vwgroup.com/confluence/spaces/XLRTE/pages/7003013392/RunBook+to+Execute+Automation+Test
+spec:
+  owner: default/admins
+  lifecycle: production
+  type: service
+  providesApis: []
+  consumesApis: []
+  dependsOn: []
+  dependencyOf: []
+  fullAccess: []
+  limitedAccess: []
+  blockedAccess: []
