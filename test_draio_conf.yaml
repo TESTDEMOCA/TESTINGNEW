@@ -1,0 +1,23 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: Component_Confluence_Test_dio
+  title: Component_Confluence_Test_dio
+  description: Component_Confluence_Test_dio
+  tags:
+    - hybrid-architecture
+  links: []
+  annotations:
+    backstage.io/techdocs-ref: >-
+      url:https://devstack.vwgroup.com/confluence/spaces/XLRTE/pages/2985886419/Roadmap
+spec:
+  owner: default/admins
+  lifecycle: production
+  type: service
+  providesApis: []
+  consumesApis: []
+  dependsOn: []
+  dependencyOf: []
+  fullAccess: []
+  limitedAccess: []
+  blockedAccess: []
