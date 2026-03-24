@@ -8,7 +8,8 @@ metadata:
     - hybrid-architecture
   annotations:
     backstage.io/techdocs-ref: url:https://devstack.vwgroup.com/confluence/spaces/XLRTE/pages/2985886419/Roadmap
-  spec:
+
+spec:
   owner: default/admins
   lifecycle: production
   type: service
