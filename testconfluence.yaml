@@ -7,7 +7,7 @@ metadata:
   tags:
     - hybrid-architecture
   annotations:
-    backstage.io/techdocs-ref: url:https://devstack.vwgroup.com/confluence/spaces/XLRTE/pages/2973662693/%F0%9F%A6%84+Product
+    backstage.io/techdocs-ref: url:https://devstack.vwgroup.com/confluence/spaces/XLRTE/pages/7003013392/RunBook+to+Execute+Automation+Test
 spec:
   owner: default/admins
   lifecycle: production
