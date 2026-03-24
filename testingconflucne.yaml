@@ -5,8 +5,9 @@ metadata:
   title: TEST_CONFLUCNE_DOC_PUBLISH
   description: TEST_CONFLUCNE_DOC_PUBLISH
   tags: []
-# annotations:
-  #   backstage.io/techdocs-ref: url:https://devstack.vwgroup.com/confluence/spaces/XLRTE/pages/2985886419/Roadmap
+  annotations:
+    backstage.io/techdocs-ref: url:https://devstack.vwgroup.com/confluence/spaces/XLRTE/pages/2985886419/Roadmap
+
 spec:
   owner: default/admins
   lifecycle: production
