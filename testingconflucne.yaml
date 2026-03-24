@@ -6,7 +6,7 @@ metadata:
   description: TEST_CONFLUCNE_DOC_PUBLISH
   tags: []
   annotations:
-    backstage.io/techdocs-ref: url:https://devstack.vwgroup.com/confluence/spaces/XLRTE/pages/2985886419/Roadmap
+    backstage.io/techdocs-ref: url:https://devstack.vwgroup.com/confluence/spaces/XLRTE/pages/3564424830/Xelerate+IT+Sec+Evidence+Documents
 
 spec:
   owner: default/admins
