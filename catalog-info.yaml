@@ -1,8 +1,8 @@
 apiVersion: backstage.io/v1alpha1
 kind: Group
 metadata:
-  name: TEST_GROUP_NEW_859
-  title: TEST_GROUP_NEW_859
+  name: TEST_GROUP_NEW_859_Name
+  title: TEST_GROUP_NEW_859_Title
   description: TEST_GROUP_NEW_859
   tags: []
   links: []
