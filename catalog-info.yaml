@@ -1,18 +1,16 @@
 apiVersion: backstage.io/v1alpha1
 kind: Group
 metadata:
-  name: Group_1
-  title: Test 123
-  description: Test 123
-  tags:
-    - aeris
+  name: TEST_GROUP_NEW_859
+  title: TEST_GROUP_NEW_859
+  description: TEST_GROUP_NEW_859
+  tags: []
   links: []
 spec:
-  type: art
+  type: team
   profile:
-    displayName: Test 123
-    email: sneha.dole@cognizant.com
+    displayName: TEST_GROUP_NEW_859
+    email: diwakar.singh02@nagarro.com
   children: []
   members:
     - sneha.dole@cognizant.com
-    - diwakar.singh02@nagarro.com
