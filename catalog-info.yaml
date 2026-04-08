@@ -1,16 +1,13 @@
 apiVersion: backstage.io/v1alpha1
-kind: Group
+kind: System
 metadata:
-  name: Group_1_859_Name
-  title: Group_1_859_DisplayName
-  description: Group_1_859
+  name: System_1_859
+  title: System_1_859
+  description: System_1_859
   tags: []
-  links: []
 spec:
-  type: team
-  profile:
-    displayName: Group_1_859_DisplayName
-    email: diwakar.singh02@nagarro.com
-  children: []
-  members:
-    - sneha.dole@cognizant.com
+  owner: default/Group_1_859_Name
+  type: service
+  fullAccess: []
+  limitedAccess: []
+  blockedAccess: []
