@@ -1,21 +1,13 @@
 apiVersion: backstage.io/v1alpha1
-kind: Component
+kind: System
 metadata:
-  name: TEST_QS_COMP
-  title: TEST_QS_COMP
+  name: TEST_QS_SYSTEM
+  title: TEST_QS_SYSTEM
   description: TEST
   tags: []
-  annotations:
-    leanix-location: >-
-      https://eu-5.leanix.net/CARIADSandbox/factsheet/Application/462a656f-9822-452a-80b2-c924b8413f7d
 spec:
   owner: default/admins
-  lifecycle: testing
-  type: website
-  providesApis: []
-  consumesApis: []
-  dependsOn: []
-  dependencyOf: []
+  type: other
   fullAccess: []
   limitedAccess: []
   blockedAccess: []
