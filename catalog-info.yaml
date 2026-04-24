@@ -3,7 +3,7 @@ kind: System
 metadata:
   name: TEST_QS_SYSTEM
   title: TEST_QS_SYSTEM
-  description: TEST
+  description: TEST_UPDATED_TO_CHNAGE_QULAITY_SEAL_TO_ACCEPTED
   tags: []
 spec:
   owner: default/admins
