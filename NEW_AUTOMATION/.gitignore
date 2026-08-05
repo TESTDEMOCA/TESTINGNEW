@@ -1,0 +1,14 @@
+node_modules/
+reports/**
+!reports/**/.gitkeep
+fixtures/codegen/*
+!fixtures/codegen/.gitkeep
+playwright-report/
+test-results/
+allure-results/
+features/xray-generated/
+.env
+xray.env
+src/config/xray.env
+*.log
+.DS_Store

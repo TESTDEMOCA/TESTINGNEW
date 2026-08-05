@@ -1,0 +1,36 @@
+const { When, Then } = require('@cucumber/cucumber');
+const { PaymentPage } = require('../pages/paymentPage');
+
+function payment(world) {
+  return new PaymentPage(world.page, world.settings);
+}
+
+Then('I should see the Payment Method page', async function () {
+  await payment(this).expectPaymentMethodVisible();
+});
+
+When('I fill the payment card details with defaults', async function () {
+  const card = this.testData?.payment || {};
+  await payment(this).fillCardDetails(card);
+});
+
+When('I click Confirm and Pay', async function () {
+  await payment(this).clickConfirmAndPay();
+});
+
+Then('I should see the Booking Confirmed page', async function () {
+  this.orderNo = await payment(this).expectBookingConfirmed();
+  if (!this.orderNo) {
+    throw new Error('Booking order number was not captured');
+  }
+  console.log(`[booking] Order No: ${this.orderNo}`);
+  if (this.attach) await this.attach(`Order No: ${this.orderNo}`, 'text/plain');
+});
+
+Then('the booking order number should be captured', async function () {
+  if (!this.orderNo || !/^[A-Z0-9-]+$/i.test(this.orderNo)) {
+    throw new Error(`Expected a booking order number on world.orderNo, got: ${this.orderNo}`);
+  }
+  console.log(`[booking] Verified Order No: ${this.orderNo}`);
+  if (this.attach) await this.attach(`Order No: ${this.orderNo}`, 'text/plain');
+});
