@@ -110,6 +110,34 @@ class BasePage {
       await firstDay.click({ force: true });
     }
   }
+
+  /**
+   * Parse lounge location copy, e.g. "Near Gate 60, Departures, Terminal 1, ..."
+   * Used by all booking flows before LMS outlet change (G35 / G60).
+   * Returns '35' | '60' | null.
+   */
+  async captureGateNumber(timeout = 8_000) {
+    const loc = this.page
+      .locator('div.font-light.font-opacity, .font-light.font-opacity')
+      .filter({ hasText: /Gate\s*\d+/i })
+      .or(this.page.getByText(/Near\s+Gate\s*\d+/i))
+      .or(this.page.locator('body').getByText(/Near\s+Gate\s*(35|60)\b/i))
+      .first();
+
+    if (!(await loc.isVisible({ timeout }).catch(() => false))) {
+      return null;
+    }
+    const text = ((await loc.textContent()) || '').trim();
+    const match = text.match(/Gate\s*(\d+)/i);
+    if (!match) return null;
+    const gate = String(match[1]);
+    if (gate === '35' || gate === '60') {
+      console.log(`[gate] Captured Gate ${gate} from: ${text}`);
+      return gate;
+    }
+    console.log(`[gate] Unsupported gate "${gate}" in: ${text}`);
+    return null;
+  }
 }
 
 module.exports = { BasePage };

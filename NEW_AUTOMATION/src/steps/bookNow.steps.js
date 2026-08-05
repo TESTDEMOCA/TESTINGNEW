@@ -3,6 +3,7 @@ const { BookNowPage } = require('../pages/bookNowPage');
 const { GuestCheckoutPage } = require('../pages/guestCheckoutPage');
 const { LoungeBookingPage } = require('../pages/loungeBookingPage');
 const { PaymentPage } = require('../pages/paymentPage');
+const { captureAndSetLmsGate } = require('../support/lmsGate');
 
 function bookNow(world) {
   return new BookNowPage(world.page, world.settings);
@@ -21,15 +22,22 @@ function payment(world) {
 }
 
 When('I search Book Now for Hong Kong International with defaults', async function () {
-  await bookNow(this).searchHongKongInternational({ time: '1000' });
+  const pageObj = bookNow(this);
+  await pageObj.searchHongKongInternational({ time: '1000' });
+  await captureAndSetLmsGate(this, pageObj, 'Book Now search defaults');
 });
 
 When('I search Book Now for Hong Kong International until Book Now is available', async function () {
-  await bookNow(this).searchHongKongUntilBookNowAvailable();
+  const pageObj = bookNow(this);
+  await pageObj.searchHongKongUntilBookNowAvailable();
+  await captureAndSetLmsGate(this, pageObj, 'Book Now search until available');
 });
 
 When('I click Book Now arrow on the Book Now widget', async function () {
-  await bookNow(this).clickBookNowArrow();
+  const pageObj = bookNow(this);
+  await captureAndSetLmsGate(this, pageObj, 'Book Now widget before arrow');
+  await pageObj.clickBookNowArrow();
+  await captureAndSetLmsGate(this, pageObj, 'Book Now cart after arrow');
 });
 
 When('I click More at HKG', async function () {
@@ -37,19 +45,27 @@ When('I click More at HKG', async function () {
 });
 
 When('I click Book Now on the search result lounge', async function () {
-  await bookNow(this).clickSearchResultBookNow();
+  const pageObj = bookNow(this);
+  await pageObj.clickSearchResultBookNow();
+  await captureAndSetLmsGate(this, pageObj, 'Book Now search result lounge');
 });
 
 When('I open lounge View option {int}', async function (nth) {
-  await bookNow(this).openLoungeView(nth);
+  const pageObj = bookNow(this);
+  await pageObj.openLoungeView(nth);
+  await captureAndSetLmsGate(this, pageObj, `lounge View option ${nth}`);
 });
 
 When('I select lounge duration PRD3352 and get price', async function () {
-  await booking(this).selectLosAndGetPrice('PRD3352');
+  const pageObj = booking(this);
+  await captureAndSetLmsGate(this, pageObj, 'before PRD3352 get price');
+  await pageObj.selectLosAndGetPrice('PRD3352');
 });
 
 When('I click Get Price leaving Services defaults', async function () {
-  await booking(this).clickGetPriceLeavingDefaults();
+  const pageObj = booking(this);
+  await captureAndSetLmsGate(this, pageObj, 'before Get Price defaults');
+  await pageObj.clickGetPriceLeavingDefaults();
 });
 
 When('I add Shower 30 mins addon on the cart', async function () {
@@ -61,7 +77,9 @@ When('I select shower service and get price', async function () {
 });
 
 When('I click Check Out on Book Now flow', async function () {
-  await bookNow(this).clickCheckOut();
+  const pageObj = bookNow(this);
+  await captureAndSetLmsGate(this, pageObj, 'Book Now cart before Check Out');
+  await pageObj.clickCheckOut();
 });
 
 When('I complete guest checkout for TC01', async function () {
@@ -156,5 +174,6 @@ Then('I should reach payment and confirm booking for Book Now flow', async funct
     throw new Error('Booking order number was not captured');
   }
   console.log(`[booking] Order No: ${this.orderNo}`);
+  console.log(`[gate] LMS gate for booking ${this.orderNo}: ${this.lmsGate || '(fallback via resolveGate)'}`);
   if (this.attach) await this.attach(`Order No: ${this.orderNo}`, 'text/plain');
 });

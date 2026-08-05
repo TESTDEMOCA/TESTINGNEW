@@ -7,41 +7,37 @@ class LmsPage extends BasePage {
     await this.page.goto(`${base}/login`, { waitUntil: 'domcontentloaded' });
     await expect(
       this.page
-        .getByRole('button', { name: /Sign In/i })
+        .getByRole('button', { name: /Sign in/i })
         .or(this.page.locator('button[type="submit"]'))
         .first(),
     ).toBeVisible({ timeout: 60_000 });
   }
 
   async signIn(username, password) {
-    const user = this.page
-      .getByLabel(/username|email|user/i)
-      .or(this.page.locator('input[formcontrolname="username"], input[name="username"], input[type="email"], #username'))
-      .first();
-    const pass = this.page
-      .getByLabel(/password/i)
-      .or(this.page.locator('input[formcontrolname="password"], input[name="password"], input[type="password"], #password'))
-      .first();
+    // Codegen: getByRole('textbox', { name: 'User name' }) / 'Password'
+    const user = this.page.getByRole('textbox', { name: 'User name' });
+    const pass = this.page.getByRole('textbox', { name: 'Password' });
 
     await expect(user).toBeVisible({ timeout: 30_000 });
+    await user.click();
     await user.fill(String(username));
+    await pass.click();
     await pass.fill(String(password));
-
-    const signIn = this.page
-      .getByRole('button', { name: /Sign In/i })
-      .or(this.page.locator('button[type="submit"]'))
-      .first();
-    await signIn.click();
+    await this.page.getByRole('button', { name: 'Sign in' }).click();
   }
 
   async openBookings() {
+    // Codegen: getByRole('link', { name: ' Bookings' })
     const bookings = this.page
-      .locator('a[routerlink="/bookings"]')
-      .or(this.page.getByRole('link', { name: /Bookings/i }))
+      .getByRole('link', { name: /Bookings/i })
+      .or(this.page.locator('a[routerlink="/bookings"]'))
       .first();
     await expect(bookings).toBeVisible({ timeout: 90_000 });
     await bookings.click();
     await expect(this.page).toHaveURL(/\/bookings/i, { timeout: 60_000 });
+
+    // Codegen: getByRole('alertdialog', { name: 'Fetched bookings' }).click()
+    await this.#dismissOverlays();
   }
 
   async ensureOnBookings() {
@@ -53,260 +49,210 @@ class LmsPage extends BasePage {
   }
 
   async waitForBookingsTable() {
+    await this.#waitForFetchingBookingsGone();
     const table = this.page.locator('table.mat-table, table[mat-table]').first();
     await expect(table).toBeVisible({ timeout: 90_000 });
-    // Rows may be empty after a bad filter — only require the table shell.
-    await this.page.waitForTimeout(500);
+    await this.page.waitForTimeout(300);
   }
 
-  async #searchInput() {
-    return this.page.locator('#txtSearch, input[type="search"]').first();
-  }
-
-  async #paginationText() {
-    return this.page.evaluate(() => {
-      const body = document.body?.innerText || '';
-      const m = body.match(/(\d+)\s*[–-]\s*(\d+)\s+of\s+(\d+)/i);
-      return m ? m[0] : '';
-    });
-  }
-
-  async searchBookingNumber(orderNo) {
-    await this.ensureOnBookings();
-    const search = await this.#searchInput();
-    await expect(search).toBeVisible({ timeout: 30_000 });
-    const before = await this.#paginationText();
-
-    await search.click({ clickCount: 3 });
-    await search.press('Backspace');
-    await search.fill('');
-    // Clear (x) control next to search if present
-    const clearBtn = this.page
-      .locator('#txtSearch')
-      .locator('xpath=ancestor::*[contains(@class,"search") or contains(@class,"mat-form")][1]')
-      .locator('button, .fa-times, .fa-xmark, mat-icon')
-      .first();
-    if (await clearBtn.isVisible({ timeout: 800 }).catch(() => false)) {
-      await clearBtn.click().catch(() => {});
-    }
-
-    await search.click();
-    await search.pressSequentially(String(orderNo), { delay: 35 });
-
-    // Trigger filter: Enter + Angular input handlers + search icon click
-    await search.press('Enter');
-    await search.evaluate((el, value) => {
-      el.value = value;
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.dispatchEvent(new Event('change', { bubbles: true }));
-      el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'Enter', code: 'Enter' }));
-    }, String(orderNo));
-
-    const searchIcon = this.page
-      .locator('#txtSearch')
-      .locator('xpath=ancestor::*[1]')
-      .locator('.fa-search, .fa-magnifying-glass, mat-icon, button')
-      .or(this.page.locator('button:near(#txtSearch)').filter({ has: this.page.locator('.fa-search') }))
-      .first();
-    if (await searchIcon.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      await searchIcon.click().catch(() => {});
-    }
-
-    // Wait briefly for client/server filter to shrink the page set
-    await this.page
-      .waitForFunction(
-        ({ prev, order }) => {
-          const text = document.body?.innerText || '';
-          if (text.includes(order)) return true;
-          const m = text.match(/(\d+)\s*[–-]\s*(\d+)\s+of\s+(\d+)/i);
-          if (!m) return false;
-          if (prev && m[0] !== prev) return true;
-          return Number(m[3]) <= 5;
-        },
-        { prev: before, order: String(orderNo) },
-        { timeout: 8_000 },
-      )
-      .catch(() => {});
-  }
-
-  bookingNumberCell(orderNo) {
-    return this.page
-      .locator('td.mat-column-bookingNumber, td.cdk-column-bookingNumber, table.mat-table td')
-      .filter({ hasText: new RegExp(escapeRegExp(String(orderNo)), 'i') })
-      .first();
-  }
-
-  async expectBookingNumberInTable(orderNo, timeout = 90_000) {
-    await expect(this.bookingNumberCell(orderNo)).toBeVisible({ timeout });
-  }
-
-  async #openOutletMenu() {
-    // Header shows: Country / Language / Outlet: HKG - PPL - G35
-    const candidates = [
-      this.page.getByText(/Outlet:\s*HKG\s*-\s*PPL/i).first(),
-      this.page.locator('text=/Outlet:\\s*/i').first(),
-      this.page.getByText(/HKG\s*-\s*PPL\s*-\s*G\d+/i).first(),
-    ];
-    for (const c of candidates) {
-      if (await c.isVisible({ timeout: 2_000 }).catch(() => false)) {
-        await c.click({ force: true });
-        await this.page.waitForTimeout(700);
-        return true;
-      }
-    }
-    return false;
-  }
-
-  async #outletOptions() {
-    return this.page.locator(
+  /** Dismiss ngx-toastr / alertdialog overlays that block Outlet + #txtSearch. */
+  async #dismissOverlays(timeout = 20_000) {
+    const overlays = this.page.locator(
       [
-        '.cdk-overlay-container [role="option"]',
-        '.cdk-overlay-container .mat-option',
-        '.cdk-overlay-container .mat-mdc-option',
-        '.cdk-overlay-container mat-option',
-        '[role="listbox"] [role="option"]',
-        '.dropdown-menu.show .dropdown-item',
-        '.mat-menu-panel button, .mat-mdc-menu-panel button',
+        '[role="alertdialog"]',
+        'toast-component',
+        '.ngx-toastr',
+        '.toast-container .ngx-toastr',
+        '.overlay-container toast-component',
       ].join(', '),
     );
+    const deadline = Date.now() + timeout;
+
+    while (Date.now() < deadline) {
+      const count = await overlays.count().catch(() => 0);
+      let anyVisible = false;
+      for (let i = 0; i < count; i++) {
+        const el = overlays.nth(i);
+        if (await el.isVisible().catch(() => false)) {
+          anyVisible = true;
+          await el.click({ force: true }).catch(() => {});
+        }
+      }
+      if (!anyVisible) {
+        console.log('[lms] Overlays cleared');
+        return;
+      }
+      await this.page.waitForTimeout(300);
+    }
+    // Last resort: hide leftover overlays so clicks can proceed
+    await this.page
+      .evaluate(() => {
+        document
+          .querySelectorAll(
+            'toast-component, .ngx-toastr, [role="alertdialog"], .overlay-container toast-component',
+          )
+          .forEach((el) => {
+            el.style.display = 'none';
+            el.style.pointerEvents = 'none';
+          });
+      })
+      .catch(() => {});
+    console.log('[lms] Overlays force-hidden');
   }
 
   /**
-   * Switch header outlet. Must stay on /bookings (never click sidebar).
+   * Codegen: getByRole('heading', { name: 'Fetching Bookings' })
+   * Wait until the loading heading is gone so #txtSearch is usable.
    */
-  async trySelectOutletMatchingBooking(orderNo) {
-    if (!(await this.#openOutletMenu())) {
-      console.log('[lms] Outlet menu trigger not found');
-      return false;
+  async #waitForFetchingBookingsGone(timeout = 60_000) {
+    const fetching = this.page.getByRole('heading', { name: /Fetching Bookings/i });
+    if (await fetching.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await fetching.click({ force: true }).catch(() => {});
+      await expect(fetching).toBeHidden({ timeout }).catch(() => {});
+      console.log('[lms] Fetching Bookings cleared');
+    }
+  }
+
+  /**
+   * Select LMS outlet:
+   * 1) Open Outlet dropdown
+   * 2) Search outlet (G60 / G35) → press Enter
+   * 3) Wait for a.dropdown-item[title="HKG - PPL - G60"] → click
+   * @param {'35'|'60'|string} gate
+   */
+  async selectOutletByGate(gate) {
+    const gateNum = String(gate || '').replace(/\D/g, '');
+    if (gateNum !== '35' && gateNum !== '60') {
+      throw new Error(`LMS outlet gate must be 35 or 60, got: ${gate}`);
+    }
+    const query = `G${gateNum}`;
+    const expectedOutlet = `HKG - PPL - G${gateNum}`;
+
+    await this.#dismissOverlays();
+
+    const outletToggle = this.page
+      .locator('a.nav-link[data-toggle="dropdown"]')
+      .filter({ hasText: /Outlet/i })
+      .or(this.page.getByText(/Outlet\s+HKG\s*-\s*PPL\s*-\s*G\d+/i))
+      .first();
+    await expect(outletToggle).toBeVisible({ timeout: 30_000 });
+
+    const currentLabel = outletToggle.locator('span.nav-link-inner--text b').first();
+    const current = ((await currentLabel.textContent().catch(() => '')) || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (current === expectedOutlet) {
+      console.log(`[lms] Outlet already set: ${current}`);
+      return;
     }
 
-    const preferG60 = !/HKBC-10240/i.test(String(orderNo));
-    const opts = await this.#outletOptions();
-    const count = await opts.count().catch(() => 0);
-    console.log(`[lms] Outlet menu options: ${count}`);
+    await this.#dismissOverlays(10_000);
+    await outletToggle.click({ force: true });
 
-    if (count === 0) {
-      await this.page.keyboard.press('Escape').catch(() => {});
-      return false;
-    }
+    const menu = this.page.locator('.dropdown-menu.outlet-dropdown-menu').first();
+    await expect(menu).toBeVisible({ timeout: 15_000 });
+    const outletSearch = menu
+      .getByPlaceholder('Search outlet')
+      .or(this.page.getByPlaceholder('Search outlet'))
+      .first();
+    await expect(outletSearch).toBeVisible({ timeout: 15_000 });
+    await outletSearch.click();
+    await outletSearch.fill('');
+    await outletSearch.fill(query);
+    await outletSearch.press('Enter');
+    console.log(`[lms] Searched outlet + Enter: ${query}`);
 
-    const preferred = [];
-    const others = [];
-    for (let i = 0; i < count; i++) {
-      const text = ((await opts.nth(i).innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
-      if (!text) continue;
-      const isG60 = /G60|Gate\s*60/i.test(text);
-      const isG35 = /G35/i.test(text);
-      if (preferG60 ? isG60 : isG35) preferred.push({ i, text });
-      else if (/HKG|PPL|G\d+/i.test(text)) others.push({ i, text });
-    }
+    // Wait for: <a class="dropdown-item" title="HKG - PPL - G60">…</a>
+    const item = menu.locator(`a.dropdown-item[title="${expectedOutlet}"]`);
+    await expect(item).toBeVisible({ timeout: 20_000 });
+    await item.click();
+    console.log(`[lms] Selected outlet: ${expectedOutlet}`);
 
-    const pick = preferred[0] || others.find((o) => /G60/i.test(o.text)) || others[0];
-    if (!pick) {
-      await this.page.keyboard.press('Escape').catch(() => {});
-      return false;
-    }
+    await this.#waitForFetchingBookingsGone();
+    await this.#dismissOverlays(15_000);
+    await expect(currentLabel).toContainText(expectedOutlet, { timeout: 20_000 });
+    await this.waitForBookingsTable();
+    console.log(`[lms] Gate selection done: ${expectedOutlet}`);
+  }
 
-    await opts.nth(pick.i).click();
-    console.log(`[lms] Switched outlet to: ${pick.text}`);
-    await this.page.waitForTimeout(1_500);
+  /**
+   * After gate selection: enter captured booking id in #txtSearch → Enter → validate.
+   */
+  async searchAndValidateBooking(orderNo, timeout = 60_000) {
+    const id = String(orderNo || '').trim();
+    if (!id) throw new Error('No booking order number to search in LMS');
+
     await this.ensureOnBookings();
-    return true;
+    await this.#waitForFetchingBookingsGone();
+    await this.#dismissOverlays(8_000);
+
+    const search = this.page.locator('#txtSearch');
+    await expect(search).toBeVisible({ timeout: 30_000 });
+    await search.click();
+    await search.fill('');
+    await search.fill(id);
+    await expect(search).toHaveValue(id, { timeout: 5_000 });
+    await search.press('Enter');
+    console.log(`[lms] Entered booking id and pressed Enter: ${id}`);
+
+    await this.#waitForFetchingBookingsGone();
+    await this.#dismissOverlays(5_000);
+
+    const cell = this.bookingNumberCell(id);
+    await expect(cell).toBeVisible({ timeout });
+    console.log(`[lms] Validated booking in LMS table: ${id}`);
+    return cell;
   }
 
-  async #cycleOutletsAndSearch(orderNo) {
-    if (!(await this.#openOutletMenu())) return false;
-    const opts = await this.#outletOptions();
-    const count = await opts.count().catch(() => 0);
-    const labels = [];
-    for (let i = 0; i < count; i++) {
-      labels.push(((await opts.nth(i).innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim());
-    }
-    await this.page.keyboard.press('Escape').catch(() => {});
-
-    for (let i = 0; i < Math.min(labels.length, 10); i++) {
-      if (!labels[i] || !/HKG|PPL|G\d+/i.test(labels[i])) continue;
-      if (!(await this.#openOutletMenu())) break;
-      const fresh = await this.#outletOptions();
-      const match = fresh.filter({ hasText: labels[i] }).first();
-      if (!(await match.isVisible({ timeout: 2_000 }).catch(() => false))) {
-        await this.page.keyboard.press('Escape').catch(() => {});
-        continue;
-      }
-      await match.click();
-      console.log(`[lms] Cycling outlet [${i + 1}]: ${labels[i]}`);
-      await this.page.waitForTimeout(1_200);
-      await this.ensureOnBookings();
-      await this.searchBookingNumber(orderNo);
-      if (await this.bookingNumberCell(orderNo).isVisible({ timeout: 10_000 }).catch(() => false)) {
-        return true;
-      }
-    }
-    return false;
+  bookingNumberCell(orderNo) {
+    const id = String(orderNo);
+    return this.page
+      .locator('td.mat-column-bookingNumber, td.cdk-column-bookingNumber, td')
+      .filter({ hasText: new RegExp(`^\\s*${escapeRegExp(id)}\\s*$`, 'i') })
+      .or(this.page.getByRole('cell', { name: id, exact: true }))
+      .or(this.page.getByText(id, { exact: true }))
+      .first();
   }
 
-  async #toggleDefaultViewOff() {
-    const toggle = this.page
-      .getByText(/Default view\s*\(Guaranteed Bookings\)/i)
-      .locator('xpath=ancestor::*[contains(@class,"toggle") or contains(@class,"mat-slide") or self::label or self::div][1]')
-      .locator('button, .mat-slide-toggle, input[type="checkbox"]')
-      .first()
-      .or(this.page.locator('mat-slide-toggle').first());
-    if (await toggle.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      const checked =
-        (await toggle.getAttribute('aria-checked').catch(() => null)) === 'true' ||
-        (await toggle.isChecked?.().catch(() => false));
-      if (checked !== false) {
-        await toggle.click().catch(() => {});
-        console.log('[lms] Toggled Default view (Guaranteed Bookings)');
-        await this.page.waitForTimeout(1_000);
-      }
-    }
+  /** Fallback when page gate was not captured: 10240→35, else 60. */
+  resolveGate(orderNo, capturedGate) {
+    if (capturedGate === '35' || capturedGate === '60') return capturedGate;
+    if (/HKBC-10240/i.test(String(orderNo || ''))) return '35';
+    return '60';
   }
 
-  async verifyCapturedBookingInLms(orderNo, username, password) {
+  /**
+   * 1) Login → Bookings
+   * 2) Change gate/outlet (G35 / G60)
+   * 3) Enter booking id in #txtSearch, search, validate row
+   */
+  async verifyCapturedBookingInLms(orderNo, username, password, capturedGate = null) {
     if (!orderNo) {
       throw new Error('No booking order number on world to verify in LMS');
     }
+    const gate = this.resolveGate(orderNo, capturedGate);
+    console.log(`[lms] Using outlet gate G${gate} for booking ${orderNo}`);
+
     await this.openLogin();
     await this.signIn(username, password);
     await this.openBookings();
     await this.waitForBookingsTable();
 
-    if (!/HKBC-10240/i.test(String(orderNo))) {
-      await this.trySelectOutletMatchingBooking(orderNo);
-      await this.#toggleDefaultViewOff();
-    }
+    // 1) Change gate
+    await this.selectOutletByGate(gate);
 
-    const attempts = 3;
+    // 2) After gate selection: enter booking id → search → validate
+    const attempts = 4;
     for (let i = 1; i <= attempts; i++) {
-      await this.searchBookingNumber(orderNo);
-      const found = await this.bookingNumberCell(orderNo)
-        .isVisible({ timeout: 12_000 })
-        .catch(() => false);
-      if (found) {
-        console.log(`[lms] Verified booking in LMS: ${orderNo}`);
+      try {
+        await this.searchAndValidateBooking(orderNo, i === attempts ? 45_000 : 20_000);
         return;
+      } catch (err) {
+        if (i === attempts) throw err;
+        console.log(`[lms] Search/validate attempt ${i}/${attempts} missed ${orderNo}`);
+        await this.page.waitForTimeout(2_500);
       }
-      console.log(`[lms] Search attempt ${i}/${attempts} missed ${orderNo}`);
-      if (i === 1) {
-        await this.trySelectOutletMatchingBooking(orderNo);
-      }
-      if (i === 2) {
-        await this.#toggleDefaultViewOff();
-      }
-      await this.page.waitForTimeout(2_000);
     }
-
-    if (await this.#cycleOutletsAndSearch(orderNo)) {
-      console.log(`[lms] Verified booking in LMS after outlet cycle: ${orderNo}`);
-      return;
-    }
-
-    await this.ensureOnBookings();
-    await this.searchBookingNumber(orderNo);
-    await this.expectBookingNumberInTable(orderNo, 20_000);
-    console.log(`[lms] Verified booking in LMS: ${orderNo}`);
   }
 }
 

@@ -12,6 +12,8 @@ class AppWorld {
     this.device = null;
     this.browserName = null;
     this.orderNo = null;
+    /** LMS outlet gate: '35' | '60' | null */
+    this.lmsGate = null;
   }
 }
 

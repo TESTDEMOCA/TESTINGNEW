@@ -106,9 +106,17 @@ class BookNowPage extends BasePage {
 
   async searchHongKongInternational({ time = '1000' } = {}) {
     await this.fillDestinationHongKong();
+    const where = this.page.getByRole('textbox', { name: /Where/i }).first();
+    await expect(where).toHaveValue(/Hong Kong International/i, { timeout: 15_000 });
     await this.setBookNowNextDay();
     await this.setBookNowTime(time);
     await this.clickSearchLounges();
+    // Wait until search results render More at HKG / View all properties
+    const more = this.page
+      .getByRole('button', { name: /More at HKG/i })
+      .or(this.page.getByRole('link', { name: /More at HKG/i }))
+      .or(this.viewAllPropertiesButton());
+    await expect(more.first()).toBeVisible({ timeout: 60_000 });
   }
 
   /**
@@ -190,7 +198,9 @@ class BookNowPage extends BasePage {
   async clickMoreAtHkg() {
     const more = this.page
       .getByRole('button', { name: /More at HKG/i })
-      .or(this.page.getByRole('link', { name: /More at HKG/i }));
+      .or(this.page.getByRole('link', { name: /More at HKG/i }))
+      .or(this.viewAllPropertiesButton())
+      .or(this.page.locator('#booking-widget-more-properties-btn'));
     await expect(more.first()).toBeVisible({ timeout: 90_000 });
     await this.waitBeforeTransition();
     await more.first().click();

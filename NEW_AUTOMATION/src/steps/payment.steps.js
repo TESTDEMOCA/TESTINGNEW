@@ -24,6 +24,7 @@ Then('I should see the Booking Confirmed page', async function () {
     throw new Error('Booking order number was not captured');
   }
   console.log(`[booking] Order No: ${this.orderNo}`);
+  console.log(`[gate] LMS gate for booking ${this.orderNo}: ${this.lmsGate || '(fallback via resolveGate)'}`);
   if (this.attach) await this.attach(`Order No: ${this.orderNo}`, 'text/plain');
 });
 
@@ -32,5 +33,6 @@ Then('the booking order number should be captured', async function () {
     throw new Error(`Expected a booking order number on world.orderNo, got: ${this.orderNo}`);
   }
   console.log(`[booking] Verified Order No: ${this.orderNo}`);
+  console.log(`[gate] LMS gate ready for LMS search: ${this.lmsGate || '(fallback via resolveGate)'}`);
   if (this.attach) await this.attach(`Order No: ${this.orderNo}`, 'text/plain');
 });
