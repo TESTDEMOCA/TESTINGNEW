@@ -243,6 +243,28 @@ class LoungeBookingPage extends BasePage {
     });
   }
 
+  /**
+   * Upgrade lounge product to PPF on Book your visit / cart — cart should show PPF.
+   */
+  async clickUpgradeAndExpectPpf() {
+    const upgrade = this.page
+      .getByRole('button', { name: /^Upgrade$/i })
+      .or(this.page.getByRole('link', { name: /^Upgrade$/i }))
+      .or(this.page.locator('a, button').filter({ hasText: /^Upgrade$/i }))
+      .first();
+
+    await expect(upgrade).toBeVisible({ timeout: 60_000 });
+    await this.waitBeforeTransition();
+    await upgrade.click();
+    await this.settle(2_000);
+
+    const ppf = this.page
+      .getByText(/\bPPF\b|Plaza Premium First|Premium First/i)
+      .first();
+    await expect(ppf).toBeVisible({ timeout: 60_000 });
+    console.log('[booking] Upgrade clicked — cart/page shows PPF');
+  }
+
   async clickReserveNow() {
     await expect(this.page.getByRole('button', { name: 'Reserve Now' })).toBeVisible({
       timeout: 90_000,

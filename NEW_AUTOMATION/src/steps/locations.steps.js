@@ -1,5 +1,6 @@
 const { When, Then } = require('@cucumber/cucumber');
 const { LocationsPage } = require('../pages/locationsPage');
+const { setLmsGate, captureAndSetLmsGate } = require('../support/lmsGate');
 
 function locations(world) {
   return new LocationsPage(world.page, world.settings);
@@ -23,6 +24,13 @@ When('I navigate to Hong Kong HKG via Locations menu', async function () {
 
 When('I open Plaza Premium Lounge departures near gate sixty', async function () {
   await locations(this).openPlazaPremiumLoungeDeparturesNearGateSixty();
+  setLmsGate(this, '60', 'Locations Near Gate 60 flow');
+});
+
+Then('I should see the Book your visit header', async function () {
+  const pageObj = locations(this);
+  await pageObj.expectBookYourVisitHeader();
+  await captureAndSetLmsGate(this, pageObj, 'Book your visit header');
 });
 
 Then('I should see the Hong Kong Kowloon High Speed Rail Terminal title', async function () {
@@ -31,8 +39,4 @@ Then('I should see the Hong Kong Kowloon High Speed Rail Terminal title', async 
 
 Then('I should be on the Hong Kong find page', async function () {
   await locations(this).expectHongKongKowloonLoungeTitle();
-});
-
-Then('I should see the Book your visit header', async function () {
-  await locations(this).expectBookYourVisitHeader();
 });

@@ -11,13 +11,11 @@
     "test:headed": "cross-env HEADLESS=false cucumber-js --config cucumber.cjs",
     "test:debug": "cross-env PWDEBUG=1 HEADLESS=false cucumber-js --config cucumber.cjs",
     "test:tag": "cucumber-js --config cucumber.cjs --tags",
-
     "launch:web": "cross-env DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@QA-HKG\"",
     "launch:web:login": "cross-env DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-login HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@QA-HKG-LOGIN\"",
     "launch:web:guest": "cross-env DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-guest HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@QA-HKG-GUEST\"",
     "launch:web:login:debug": "cross-env PWDEBUG=1 SLOW_MO=1000 DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-login-debug HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@QA-HKG-LOGIN\"",
     "launch:web:guest:debug": "cross-env PWDEBUG=1 SLOW_MO=1000 DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-guest-debug HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@QA-HKG-GUEST\"",
-
     "launch:tc01": "cross-env DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc01 HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC01\"",
     "launch:tc01:debug": "cross-env PWDEBUG=1 SLOW_MO=1000 DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc01-debug HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC01\"",
     "launch:tc02": "cross-env DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc02 HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC02\"",
@@ -27,14 +25,17 @@
     "launch:tc04": "cross-env DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc04 HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC04\"",
     "launch:tc04:debug": "cross-env PWDEBUG=1 SLOW_MO=1000 DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc04-debug HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC04\"",
     "launch:tc01-tc04": "cross-env DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc01-tc04 HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC01 or @TC02 or @TC03 or @TC04\"",
-
+    "launch:tc05": "cross-env DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc05 HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC05\"",
+    "launch:tc05:debug": "cross-env PWDEBUG=1 SLOW_MO=1000 DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc05-debug HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC05\"",
+    "launch:tc06": "cross-env DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc06 HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC06\"",
+    "launch:tc06:debug": "cross-env PWDEBUG=1 SLOW_MO=1000 DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc06-debug HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC06\"",
+    "launch:tc07": "cross-env DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc07 HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC07\"",
+    "launch:tc07:debug": "cross-env PWDEBUG=1 SLOW_MO=1000 DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc07-debug HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC07\"",
     "launch:mobile": "cross-env DEVICE=mobile BROWSER=chromium REPORT_SUFFIX=chromium-mobile HEADLESS=false cucumber-js --config cucumber.cjs --profile mobile --tags \"@QA-HKG\"",
     "launch:mobile:login": "cross-env DEVICE=mobile BROWSER=chromium REPORT_SUFFIX=chromium-mobile-login HEADLESS=false cucumber-js --config cucumber.cjs --profile mobile --tags \"@QA-HKG-LOGIN\"",
     "launch:mobile:guest": "cross-env DEVICE=mobile BROWSER=chromium REPORT_SUFFIX=chromium-mobile-guest HEADLESS=false cucumber-js --config cucumber.cjs --profile mobile --tags \"@QA-HKG-GUEST\"",
-
     "launch:web-and-mobile": "cross-env DEVICE=desktop BROWSER=chromium HEADLESS=false DEVICES=desktop,mobile node scripts/run-devices.js",
     "launch:browsers": "cross-env DEVICE=desktop HEADLESS=false BROWSERS=chromium,firefox,webkit node scripts/run-browsers.js",
-
     "playwright:install": "playwright install chromium",
     "playwright:install:all": "playwright install chromium firefox webkit",
     "codegen:desktop": "cross-env DEVICE=desktop CODEGEN_OUT=fixtures/codegen/desktop-flow.js node scripts/codegen.js desktop",
