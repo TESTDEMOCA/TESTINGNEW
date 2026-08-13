@@ -67,6 +67,64 @@ class PaymentPage extends BasePage {
     if (await nameOnCard.isVisible({ timeout: 5_000 }).catch(() => false)) {
       await nameOnCard.fill(name);
     }
+
+    if (card.saveForFuture) {
+      await this.checkSavePaymentDetailsForFuture();
+    }
+  }
+
+  /**
+   * Member first-time payment: tick "save payment details for future"
+   * so later logins autofill card/expiry and only ask for CVV.
+   */
+  async checkSavePaymentDetailsForFuture() {
+    const checkbox = this.page
+      .locator('input[name="storeDetails"], input[name="storePaymentMethod"], input.adyen-checkout__checkbox__input')
+      .or(
+        this.page.getByRole('checkbox', {
+          name: /save.*payment|save.*card|store.*detail|future|save for my next/i,
+        }),
+      )
+      .first();
+
+    const label = this.page
+      .getByText(/save payment details for future|store details for future|save for my next payment|save card details/i)
+      .first();
+
+    if (await checkbox.isVisible({ timeout: 8_000 }).catch(() => false)) {
+      const checked = await checkbox.isChecked().catch(() => false);
+      if (!checked) {
+        await checkbox.check({ force: true }).catch(async () => {
+          await checkbox.click({ force: true });
+        });
+      }
+      console.log('[payment] Checked save payment details for future');
+      return;
+    }
+
+    if (await label.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await label.click();
+      console.log('[payment] Clicked save payment details label');
+      return;
+    }
+
+    throw new Error(
+      'Could not find "save payment details for future" checkbox on payment page',
+    );
+  }
+
+  /** Later member payments: card/expiry autofilled — enter CVV only. */
+  async fillSavedCardSecurityCodeOnly(cvc = '7373') {
+    await this.expectPaymentMethodVisible();
+    await this.waitForAdyenDropIn();
+    const security = this.page
+      .locator('iframe[title="Iframe for security code"]')
+      .contentFrame()
+      .getByRole('textbox', { name: 'Security code' });
+    await expect(security).toBeVisible({ timeout: 60_000 });
+    await security.click();
+    await security.fill(String(cvc));
+    console.log('[payment] Filled CVV only for saved card');
   }
 
   async clickConfirmAndPay() {

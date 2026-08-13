@@ -17,6 +17,11 @@ When('I navigate to the {string} menu', async function (menuLabel) {
   await home(this).navigateToMenu(menuLabel);
 });
 
+When('I select currency {string}', async function (currencyCode) {
+  await home(this).selectCurrency(currencyCode);
+  this.selectedCurrency = String(currencyCode || '').trim().toUpperCase();
+});
+
 When('I search for lounges in {string}', async function (location) {
   await home(this).searchLounges({ location });
 });

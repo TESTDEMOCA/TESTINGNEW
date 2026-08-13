@@ -18,3 +18,5 @@ Feature: TC04 Book Now More at HKG shower addon guest checkout
     Then I should reach payment and confirm booking for Book Now flow
     And the booking order number should be captured
     And I should see the captured booking in LMS Bookings
+
+

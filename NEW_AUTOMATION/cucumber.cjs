@@ -10,6 +10,7 @@ const common = {
     'src/support/world.js',
     'src/hooks/hooks.js',
     'src/steps/login.steps.js',
+    'src/steps/signup.steps.js',
     'src/steps/home.steps.js',
     'src/steps/bookNow.steps.js',
     'src/steps/locations.steps.js',
@@ -17,6 +18,7 @@ const common = {
     'src/steps/checkout.steps.js',
     'src/steps/payment.steps.js',
     'src/steps/lms.steps.js',
+    'src/steps/passes.steps.js',
   ],
   format: [
     'progress-bar',

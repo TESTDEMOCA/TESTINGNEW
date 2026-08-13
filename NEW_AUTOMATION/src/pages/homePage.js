@@ -72,6 +72,40 @@ class HomePage extends BasePage {
     await target.waitFor({ state: 'visible', timeout: 30_000 });
     await target.click();
   }
+
+  /**
+   * Open Language & currency modal, select a currency code, Apply.
+   * codegen: getByRole('link').filter({ hasText: 'Language' })
+   *          #languageCurrency getByText('<CODE>') → Apply
+   */
+  async openLanguageCurrencyModal() {
+    const modal = this.page.locator('#languageCurrency');
+    if (await modal.isVisible({ timeout: 1_500 }).catch(() => false)) {
+      return modal;
+    }
+    const languageLink = this.page.getByRole('link').filter({ hasText: 'Language' }).first();
+    await expect(languageLink).toBeVisible({ timeout: 30_000 });
+    await languageLink.click();
+    await expect(modal).toBeVisible({ timeout: 15_000 });
+    return modal;
+  }
+
+  async selectCurrency(currencyCode) {
+    const code = String(currencyCode || '').trim().toUpperCase();
+    if (!code) {
+      throw new Error('Currency code is required (e.g. HKD, INR, USD).');
+    }
+
+    const modal = await this.openLanguageCurrencyModal();
+    const option = modal.getByText(code, { exact: true });
+    await expect(option).toBeVisible({ timeout: 15_000 });
+    await option.click();
+
+    const apply = this.page.getByRole('button', { name: 'Apply' });
+    await expect(apply).toBeVisible({ timeout: 10_000 });
+    await apply.click();
+    await expect(modal).toBeHidden({ timeout: 15_000 }).catch(() => {});
+  }
 }
 
 module.exports = { HomePage };
