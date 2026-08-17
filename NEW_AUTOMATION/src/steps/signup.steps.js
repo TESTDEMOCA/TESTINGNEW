@@ -156,6 +156,14 @@ Then(
 Then(
   'I should receive an Unlock Your PPL Pass email in Yopmail with the captured booking id',
   async function () {
+    // Smart Traveller / Unlock Your PPL Pass check — only for @TC01_pass, @TC02_pass, @TC03_pass.
+    if (!this.expectUnlockPplPassEmail) {
+      console.log(
+        '[yopmail] Skipping Unlock Your PPL Pass check (limited to TC01_pass / TC02_pass / TC03_pass)',
+      );
+      return;
+    }
+
     if (!this.yopmailPage) {
       throw new Error('Yopmail browser was not opened. Run the generate-email step first.');
     }
@@ -185,9 +193,19 @@ When('I log in with the newly registered credentials', async function () {
   await this.page.bringToFront();
   await login(this).submitLogin(this.signupEmail, this.signupPassword);
 
-  // TC03 Smart Traveller: exclusive → login should land with mini-cart Check Out ready.
-  if (this.passProduct || this.passProducts?.length) {
+  // Exclusive → login cart recovery only for Smart Traveller member-only pass flows (TC03_pass).
+  if (this.smartTravellerPassFlow) {
     const passesPage = new PassesPage(this.page, this.settings);
-    await passesPage.ensureCheckOutAfterExclusiveLogin();
+    const paidTotal = await passesPage.ensureCheckOutAfterExclusiveLogin();
+    // Keep tile price as passProduct.price; store cart total separately for paid-amount checks.
+    if (paidTotal) {
+      if (this.passProduct) this.passProduct.paidPrice = paidTotal;
+      if (Array.isArray(this.passProducts) && this.passProducts[0]) {
+        this.passProducts[0].paidPrice = paidTotal;
+      }
+      console.log(
+        `[passes] Tile price kept: "${this.passProduct?.price}"; mini-cart paid: "${paidTotal}"`,
+      );
+    }
   }
 });

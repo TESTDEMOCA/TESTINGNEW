@@ -106,7 +106,7 @@ class YopmailPage {
    * @param {string} orderNo booking id captured from confirmation page
    * @param {{ timeoutMs?: number }} [options]
    */
-  async expectBookingConfirmationEmail(mailbox, orderNo, { timeoutMs = 240_000 } = {}) {
+  async expectBookingConfirmationEmail(mailbox, orderNo, { timeoutMs = 120_000 } = {}) {
     const bookingId = String(orderNo || '').trim();
     if (!bookingId) {
       throw new Error('Booking order number is required to validate the Yopmail confirmation email.');
@@ -248,7 +248,7 @@ class YopmailPage {
     }
 
     throw new Error(
-      `Yopmail did not receive "Plaza Premium Lounge Booking Confirmation ${bookingId}" from PPL UAT in time: ${lastError?.message || 'unknown'}. Last inbox: ${lastInboxSnapshot.slice(0, 300) || '(empty)'}`,
+      `Yopmail did not receive "Plaza Premium Lounge Booking Confirmation ${bookingId}" from PPL UAT within 2 minutes: ${lastError?.message || 'unknown'}. Last inbox: ${lastInboxSnapshot.slice(0, 300) || '(empty)'}`,
     );
   }
 
@@ -266,7 +266,7 @@ class YopmailPage {
    * @param {string} orderNo
    * @param {{ timeoutMs?: number }} [options]
    */
-  async expectUnlockYourPplPassEmail(mailbox, orderNo, { timeoutMs = 240_000 } = {}) {
+  async expectUnlockYourPplPassEmail(mailbox, orderNo, { timeoutMs = 120_000 } = {}) {
     const bookingId = String(orderNo || '').trim();
     if (!bookingId) {
       throw new Error('Booking order number is required to validate the Unlock Your PPL Pass email.');
@@ -380,7 +380,7 @@ class YopmailPage {
     }
 
     throw new Error(
-      `Yopmail did not receive "Unlock Your PPL Pass" from PPL Pass IBE UAT with Order ID ${bookingId} in time: ${lastError?.message || 'unknown'}. Last inbox: ${lastInboxSnapshot.slice(0, 300) || '(empty)'}`,
+      `Yopmail did not receive "Unlock Your PPL Pass" from PPL Pass IBE UAT with Order ID ${bookingId} within 2 minutes: ${lastError?.message || 'unknown'}. Last inbox: ${lastInboxSnapshot.slice(0, 300) || '(empty)'}`,
     );
   }
 
@@ -388,7 +388,7 @@ class YopmailPage {
    * Wait for the Smart Traveller verification mail, open activation link, assert success.
    * @param {import('@playwright/test').BrowserContext} context
    */
-  async openActivationLinkAndConfirm(context, { timeoutMs = 180_000 } = {}) {
+  async openActivationLinkAndConfirm(context, { timeoutMs = 120_000 } = {}) {
     const deadline = Date.now() + timeoutMs;
     let lastError;
 
@@ -435,7 +435,7 @@ class YopmailPage {
     }
 
     throw new Error(
-      `Yopmail activation email not found/opened in time: ${lastError?.message || 'unknown'}`,
+      `Yopmail activation email not found/opened within 2 minutes: ${lastError?.message || 'unknown'}`,
     );
   }
 }

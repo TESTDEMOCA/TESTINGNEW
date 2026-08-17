@@ -16,11 +16,13 @@ When('I click on the Passes on the top menu', async function () {
 });
 
 Then('i select the member only pass from the list of passes', async function () {
+  this.smartTravellerPassFlow = true;
   this.passProduct = await passes(this).selectMemberOnlyPass();
   this.passProducts = [this.passProduct];
 });
 
 Then('I select the member only pass from the list of passes', async function () {
+  this.smartTravellerPassFlow = true;
   this.passProduct = await passes(this).selectMemberOnlyPass();
   this.passProducts = [this.passProduct];
 });

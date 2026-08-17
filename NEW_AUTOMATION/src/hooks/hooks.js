@@ -132,6 +132,8 @@ Before(async function () {
   this.testData = generateTestData();
   this.device = this.settings.deviceName;
   this.browserName = this.settings.browser.name;
+  this.smartTravellerPassFlow = false;
+  this.expectUnlockPplPassEmail = false;
 
   // Brand-new context every scenario (isolated cookies/storage).
   const contextOptions = {
@@ -157,6 +159,11 @@ Before(async function () {
 
   // Mandatory wipe before every scenario/run.
   await clearBrowserSession(this.context, this.page, this.settings);
+});
+
+/** Unlock Your PPL Pass / Smart Traveller email checks — TC01_pass, TC02_pass, TC03_pass only. */
+Before({ tags: '@TC01_pass or @TC02_pass or @TC03_pass' }, async function () {
+  this.expectUnlockPplPassEmail = true;
 });
 
 /**

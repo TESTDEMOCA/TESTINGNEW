@@ -20,6 +20,10 @@ class AppWorld {
     this.yopmailBrowser = null;
     this.yopmailContext = null;
     this.yopmailPage = null;
+    /** True when scenario selected Smart Traveller exclusive pass (TC03_pass). */
+    this.smartTravellerPassFlow = false;
+    /** Unlock Your PPL Pass email check — TC01_pass / TC02_pass / TC03_pass only. */
+    this.expectUnlockPplPassEmail = false;
   }
 }
 
