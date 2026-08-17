@@ -253,6 +253,138 @@ class YopmailPage {
   }
 
   /**
+   * Validate "Unlock Your PPL Pass" mail from PPL Pass IBE UAT and assert Order ID
+   * matches the confirmation-page booking id.
+   *
+   * Inbox row:
+   *   <button class="lm">…<span class="lmf">PPL Pass IBE UAT</span>…<div class="lms">Unlock Your PPL Pass</div></button>
+   * Opened subject:
+   *   <div class="ellipsis nw b f18">Unlock Your PPL Pass</div>
+   * Body Order ID cell with full booking id.
+   *
+   * @param {string} mailbox
+   * @param {string} orderNo
+   * @param {{ timeoutMs?: number }} [options]
+   */
+  async expectUnlockYourPplPassEmail(mailbox, orderNo, { timeoutMs = 240_000 } = {}) {
+    const bookingId = String(orderNo || '').trim();
+    if (!bookingId) {
+      throw new Error('Booking order number is required to validate the Unlock Your PPL Pass email.');
+    }
+
+    const unlockSubject = /Unlock Your PPL Pass/i;
+    const expectedFrom = /PPL\s*Pass\s*IBE\s*UAT/i;
+
+    const onYopmail = /yopmail\.com/i.test(this.page.url());
+    if (!onYopmail) {
+      await this.openInboxForMailbox(mailbox);
+    } else {
+      await this.dismissAdsIfPresent();
+    }
+
+    const deadline = Date.now() + timeoutMs;
+    let lastInboxSnapshot = '';
+    let lastError;
+
+    while (Date.now() < deadline) {
+      try {
+        await this.refreshInbox();
+        await this.dismissAdsIfPresent();
+
+        const inbox = this.inboxFrame();
+        lastInboxSnapshot = (
+          (await inbox.locator('body').innerText({ timeout: 8_000 }).catch(() => '')) || ''
+        ).trim();
+        console.log(
+          `[yopmail] Inbox refresh snapshot (looking for Unlock Your PPL Pass / ${bookingId}): ${lastInboxSnapshot
+            .slice(0, 300)
+            .replace(/\s+/g, ' ')}`,
+        );
+
+        if (!unlockSubject.test(lastInboxSnapshot) || !expectedFrom.test(lastInboxSnapshot)) {
+          lastError = new Error(
+            `Unlock Your PPL Pass not listed yet (need PPL Pass IBE UAT + Unlock Your PPL Pass). Inbox: ${lastInboxSnapshot.slice(0, 240) || '(empty)'}`,
+          );
+          await this.page.waitForTimeout(4_000);
+          continue;
+        }
+
+        // Prefer button.lm rows used by Yopmail list UI.
+        const mailRow = inbox
+          .locator('button.lm')
+          .filter({ hasText: unlockSubject })
+          .filter({ hasText: expectedFrom })
+          .or(
+            inbox
+              .locator('div.m, button.lm')
+              .filter({ hasText: unlockSubject })
+              .filter({ hasText: expectedFrom }),
+          )
+          .or(inbox.locator('.lms').filter({ hasText: unlockSubject }))
+          .first();
+
+        if (!(await mailRow.isVisible({ timeout: 5_000 }).catch(() => false))) {
+          lastError = new Error(
+            `Unlock Your PPL Pass visible in inbox text but row not clickable. Inbox: ${lastInboxSnapshot.slice(0, 240)}`,
+          );
+          await this.page.waitForTimeout(4_000);
+          continue;
+        }
+
+        const rowText = ((await mailRow.innerText().catch(() => '')) || '').trim();
+        console.log(`[yopmail] Opening Unlock Your PPL Pass row: ${rowText.replace(/\s+/g, ' ').slice(0, 180)}`);
+
+        await mailRow.click();
+        await this.page.waitForTimeout(1_500);
+        await this.dismissAdsIfPresent();
+
+        const mail = this.mailFrame();
+
+        // Opened-mail subject:
+        // <div class="ellipsis nw b f18">Unlock Your PPL Pass</div>
+        const subjectEl = mail.locator('div.ellipsis.nw.b.f18').filter({ hasText: unlockSubject });
+        await expect(subjectEl.first()).toBeVisible({ timeout: 15_000 });
+        const subjectText = ((await subjectEl.first().innerText().catch(() => '')) || '').trim();
+        if (!unlockSubject.test(subjectText)) {
+          throw new Error(
+            `Opened-mail subject missing "Unlock Your PPL Pass". Actual: "${subjectText}"`,
+          );
+        }
+
+        // Body Order ID row — must contain label Order ID + confirmation booking id.
+        const orderIdRow = mail
+          .locator('tr')
+          .filter({ hasText: /Order\s*ID/i })
+          .filter({ hasText: bookingId })
+          .first();
+        await expect(orderIdRow).toBeVisible({ timeout: 15_000 });
+
+        const orderIdValue = orderIdRow.locator('span').filter({ hasText: bookingId }).first();
+        await expect(orderIdValue).toBeVisible({ timeout: 10_000 });
+        const orderIdText = ((await orderIdValue.innerText().catch(() => '')) || '').trim();
+        if (orderIdText !== bookingId) {
+          throw new Error(
+            `Unlock Your PPL Pass Order ID does not match confirmation booking id ${bookingId}. Actual: "${orderIdText}"`,
+          );
+        }
+
+        console.log(
+          `[yopmail] Validated Unlock Your PPL Pass subject and Order ID: ${bookingId} (from PPL Pass IBE UAT)`,
+        );
+        return;
+      } catch (err) {
+        lastError = err;
+        console.log(`[yopmail] Unlock Your PPL Pass check retry: ${err.message}`);
+        await this.page.waitForTimeout(4_000);
+      }
+    }
+
+    throw new Error(
+      `Yopmail did not receive "Unlock Your PPL Pass" from PPL Pass IBE UAT with Order ID ${bookingId} in time: ${lastError?.message || 'unknown'}. Last inbox: ${lastInboxSnapshot.slice(0, 300) || '(empty)'}`,
+    );
+  }
+
+  /**
    * Wait for the Smart Traveller verification mail, open activation link, assert success.
    * @param {import('@playwright/test').BrowserContext} context
    */

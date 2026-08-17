@@ -377,10 +377,9 @@ class BookNowPage extends BasePage {
 
     await expect(
       this.page
-        .locator(
-          'button.js-minicart-checkout-upsell[data-guest-checkout-url="/en-uk/guest-checkout"]',
-        )
-        .or(this.page.getByRole('button', { name: 'Check Out' }))
+        .locator(BasePage.MINICART_CHECKOUT_SELECTOR)
+        .filter({ hasText: /^Check Out$/i })
+        .or(this.page.getByRole('button', { name: /^Check Out$/i }))
         .or(this.page.getByRole('heading', { name: 'Cart' }))
         .first(),
     ).toBeVisible({ timeout: 90_000 });
@@ -442,9 +441,10 @@ class BookNowPage extends BasePage {
     await this.waitBeforeTransition();
     await bookNow.click();
     await expect(
-      this.page.locator(
-        'button.js-minicart-checkout-upsell[data-guest-checkout-url="/en-uk/guest-checkout"]',
-      ),
+      this.page
+        .locator(BasePage.MINICART_CHECKOUT_SELECTOR)
+        .filter({ hasText: /^Check Out$/i })
+        .first(),
     ).toBeVisible({ timeout: 90_000 });
 
     return featured;
@@ -543,16 +543,15 @@ class BookNowPage extends BasePage {
 
   #visibleCheckOut() {
     return this.page
-      .locator(
-        'button.js-minicart-checkout-upsell[data-guest-checkout-url="/en-uk/guest-checkout"]',
-      )
-      .or(this.page.getByRole('button', { name: 'Check Out' }))
+      .locator(BasePage.MINICART_CHECKOUT_SELECTOR)
+      .filter({ hasText: /^Check Out$/i })
+      .or(this.page.getByRole('button', { name: /^Check Out$/i }))
       .filter({ visible: true })
       .first();
   }
 
   async #recoverPurchaserCheckOut() {
-    // Upsell/addon modal can leave Check Out in DOM but hidden — go back to purchaser cart.
+    // Upsell/addon modal can leave Check Out in DOM but hidden — dismiss, open cart, or go back.
     const blockingModal = this.page.locator('#add-service-form-0.show, .modal.show').first();
     if (await blockingModal.isVisible({ timeout: 1_000 }).catch(() => false)) {
       await this.page.keyboard.press('Escape');
@@ -563,14 +562,26 @@ class BookNowPage extends BasePage {
       return;
     }
 
+    // Prefer opening mini-cart (Passes / Smart Traveller) over Book Now purchaser back.
+    try {
+      await this.ensureMiniCartCheckOutVisible(15_000);
+      return;
+    } catch {
+      console.log('[book-now] Mini-cart Check Out still hidden after open attempts');
+    }
+
     const back = this.page
       .locator(
         'a.desktop-back-btn[href*="ClearGuestInfoAndRedirectToPurchaserInfo"], a.desktop-back-btn[title="back"], a[href*="ClearGuestInfoAndRedirectToPurchaserInfo"]',
       )
       .first();
-    await expect(back).toBeVisible({ timeout: 30_000 });
-    await back.click();
-    console.log('[book-now] Clicked desktop back to restore purchaser Check Out');
+    if (await back.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await back.click();
+      console.log('[book-now] Clicked desktop back to restore purchaser Check Out');
+      return;
+    }
+
+    console.log('[book-now] No purchaser back button found — Check Out recovery incomplete');
   }
 
   async applyPromoCodeAndVerifyPrice(code) {
@@ -606,8 +617,8 @@ class BookNowPage extends BasePage {
       await this.#recoverPurchaserCheckOut();
     }
 
-    const checkOut = this.#visibleCheckOut();
-    await expect(checkOut).toBeVisible({ timeout: 90_000 });
+    // Final wait — opens mini-cart if needed (fixes Passes exclusive → login flow).
+    const checkOut = await this.ensureMiniCartCheckOutVisible(60_000);
     await this.waitBeforeTransition();
     await checkOut.click();
     await expect(

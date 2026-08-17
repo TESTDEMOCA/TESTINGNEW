@@ -40,6 +40,8 @@
     "launch:tc02pass": "cross-env DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc02pass HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC02_pass\"",
     "launch:tc03pass:debug": "cross-env PWDEBUG=1 SLOW_MO=1000 DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc03pass-debug HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC03_pass\"",
     "launch:tc03pass": "cross-env DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc03pass HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC03_pass\"",
+    "launch:tc03pass:new:debug": "cross-env PWDEBUG=1 SLOW_MO=1000 DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc03pass-new-debug HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC03_pass_new\"",
+    "launch:tc03pass:new": "cross-env DEVICE=desktop BROWSER=chromium REPORT_SUFFIX=chromium-desktop-tc03pass-new HEADLESS=false cucumber-js --config cucumber.cjs --profile desktop --tags \"@TC03_pass_new\"",
     "launch:web-and-mobile": "cross-env DEVICE=desktop BROWSER=chromium HEADLESS=false DEVICES=desktop,mobile node scripts/run-devices.js",
     "launch:browsers": "cross-env DEVICE=desktop HEADLESS=false BROWSERS=chromium,firefox,webkit node scripts/run-browsers.js",
     "playwright:install": "playwright install chromium",

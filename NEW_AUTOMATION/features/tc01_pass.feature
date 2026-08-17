@@ -17,3 +17,4 @@ Feature: TC01 Pass Booking Creation
     And I verify Confirmation page should be displayed with the same product and price that the customer has paid and purchased
     And I redirect to Yopmail and refresh the inbox
     And I should receive a Plaza Premium Lounge Booking Confirmation email in Yopmail with the captured booking id
+    And I should receive an Unlock Your PPL Pass email in Yopmail with the captured booking id

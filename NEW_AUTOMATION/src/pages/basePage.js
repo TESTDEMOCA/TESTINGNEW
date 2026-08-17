@@ -6,10 +6,78 @@ class BasePage {
   static TRANSITION_WAIT_MIN_MS = 2_000;
   static TRANSITION_WAIT_MAX_MS = 5_000;
 
+  /**
+   * Mini-cart Check Out CTA:
+   * <button type="button" class="btn btn-primary fullWidth flat-btn js-minicart-checkout-upsell mb-0"
+   *   data-guest-checkout-url="/en-uk/guest-checkout">Check Out</button>
+   */
+  static MINICART_CHECKOUT_SELECTOR =
+    'button.btn.btn-primary.fullWidth.flat-btn.js-minicart-checkout-upsell[data-guest-checkout-url="/en-uk/guest-checkout"], button.js-minicart-checkout-upsell[data-guest-checkout-url="/en-uk/guest-checkout"]';
+
   constructor(page, settings) {
     this.page = page;
     this.settings = settings;
     this.actions = new ActionEngine(page);
+  }
+
+  /** Visible mini-cart Check Out button (preferred locator + text fallback). */
+  miniCartCheckOutButton() {
+    return this.page
+      .locator(BasePage.MINICART_CHECKOUT_SELECTOR)
+      .filter({ hasText: /^Check Out$/i })
+      .or(this.page.getByRole('button', { name: /^Check Out$/i }))
+      .first();
+  }
+
+  /**
+   * Open mini-cart if needed and wait for the Check Out CTA.
+   * Passes / exclusive-login flows often leave the cart closed after modal login.
+   */
+  async ensureMiniCartCheckOutVisible(timeoutMs = 45_000) {
+    const checkOut = this.miniCartCheckOutButton();
+    const deadline = Date.now() + timeoutMs;
+
+    // Close leftover login / dialogs that can hide the cart.
+    await this.page.keyboard.press('Escape').catch(() => {});
+    await this.page
+      .locator('#userLogin.show, .modal-backdrop')
+      .first()
+      .waitFor({ state: 'hidden', timeout: 5_000 })
+      .catch(() => {});
+
+    while (Date.now() < deadline) {
+      if (await checkOut.isVisible({ timeout: 800 }).catch(() => false)) {
+        console.log('[cart] Check Out button is visible');
+        return checkOut;
+      }
+
+      const toggles = [
+        this.page.locator('#minicart, a#minicart, button#minicart').first(),
+        this.page.locator('[class*="minicart"] a, [class*="minicart"] button, a[class*="cart-icon"], button[class*="cart-icon"]').first(),
+        this.page.locator('button[aria-label*="cart" i], a[aria-label*="cart" i]').first(),
+        this.page
+          .locator('button[class*="cart" i], a[class*="cart" i]')
+          .filter({ hasNotText: /check\s*out/i })
+          .first(),
+      ];
+
+      for (const toggle of toggles) {
+        if (await toggle.isVisible({ timeout: 400 }).catch(() => false)) {
+          await toggle.click().catch(() => {});
+          if (await checkOut.isVisible({ timeout: 3_000 }).catch(() => false)) {
+            console.log('[cart] Opened mini-cart — Check Out visible');
+            return checkOut;
+          }
+        }
+      }
+
+      await this.page.waitForTimeout(1_000);
+    }
+
+    throw new Error(
+      'Mini-cart Check Out button not visible ' +
+        '(button.js-minicart-checkout-upsell[data-guest-checkout-url="/en-uk/guest-checkout"]).',
+    );
   }
 
   async settle(ms = BasePage.AFTER_SELECT_SETTLE_MS) {

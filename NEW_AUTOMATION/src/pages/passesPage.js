@@ -120,6 +120,32 @@ class PassesPage extends BasePage {
     return details;
   }
 
+  /**
+   * After exclusive → login, ensure the pass is in cart and Check Out is visible.
+   * If cart is empty, re-click Exclusive while already logged in.
+   */
+  async ensureCheckOutAfterExclusiveLogin() {
+    try {
+      await this.ensureMiniCartCheckOutVisible(20_000);
+      return;
+    } catch {
+      console.log(
+        '[passes] Check Out not visible after login — re-clicking Smart Traveller exclusive while logged in',
+      );
+    }
+
+    await this.selectMemberOnlyPass();
+
+    const loginModal = this.page.locator('#userLogin .modal-content, #userLogin.show').first();
+    if (await loginModal.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      throw new Error(
+        'Login modal opened again after exclusive click — member session may not be active.',
+      );
+    }
+
+    await this.ensureMiniCartCheckOutVisible(45_000);
+  }
+
   #passCardByDetails(details = {}) {
     if (details?.name) {
       const nameRe = new RegExp(PassesPage.#escapeRegex(String(details.name).trim()), 'i');
@@ -173,10 +199,7 @@ class PassesPage extends BasePage {
   }
 
   async #tryOpenMiniCart() {
-    const checkOutButton = this.page
-      .locator('[data-guest-checkout-url="/en-uk/guest-checkout"]')
-      .or(this.page.getByRole('button', { name: /^Check Out$/i }))
-      .first();
+    const checkOutButton = this.miniCartCheckOutButton();
 
     if (await checkOutButton.isVisible({ timeout: 1_000 }).catch(() => false)) return true;
 
@@ -259,9 +282,7 @@ class PassesPage extends BasePage {
 
     // Wait for mini-cart or cart indicator to update
     await expect(
-      this.page
-        .locator('[data-guest-checkout-url="/en-uk/guest-checkout"]')
-        .or(this.page.getByRole('button', { name: 'Check Out' }))
+      this.miniCartCheckOutButton()
         .or(this.page.getByRole('heading', { name: /cart/i }))
         .first(),
     ).toBeVisible({ timeout: 60_000 });
@@ -273,10 +294,7 @@ class PassesPage extends BasePage {
   async closeMiniCartAndAddAnotherPass(existingProducts = []) {
     await this.#dismissBlockingNotice();
 
-    const checkOutButton = this.page
-      .locator('[data-guest-checkout-url="/en-uk/guest-checkout"]')
-      .or(this.page.getByRole('button', { name: /^Check Out$/i }))
-      .first();
+    const checkOutButton = this.miniCartCheckOutButton();
 
     const miniCartRoot = checkOutButton.locator('xpath=ancestor::*[self::aside or self::div][1]').first();
     const closeCandidates = [
@@ -321,10 +339,7 @@ class PassesPage extends BasePage {
 
     // Cart may auto-open after navigation since it already has an item — close it before searching.
     await this.#dismissBlockingNotice();
-    const miniCartAfterNav = this.page
-      .locator('[data-guest-checkout-url="/en-uk/guest-checkout"]')
-      .or(this.page.getByRole('button', { name: /^Check Out$/i }))
-      .first();
+    const miniCartAfterNav = this.miniCartCheckOutButton();
     if (await miniCartAfterNav.isVisible({ timeout: 2_000 }).catch(() => false)) {
       await this.page.keyboard.press('Escape').catch(() => {});
       await miniCartAfterNav.isHidden({ timeout: 3_000 }).catch(() => {});

@@ -16,6 +16,10 @@ class AppWorld {
     this.lmsGate = null;
     /** Site currency chosen via Language modal (e.g. INR); overrides destination default. */
     this.selectedCurrency = null;
+    /** Dedicated Yopmail browser (separate from app browser for video capture). */
+    this.yopmailBrowser = null;
+    this.yopmailContext = null;
+    this.yopmailPage = null;
   }
 }
 

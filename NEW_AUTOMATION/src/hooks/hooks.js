@@ -12,6 +12,7 @@ const fs = require('fs');
 const { loadSettings } = require('../config/settings');
 const { generateTestData } = require('../utils/testData');
 const { ensureDir } = require('../utils/helpers');
+const { closeYopmailSession } = require('../support/yopmailSession');
 
 const REPO_ROOT = path.join(__dirname, '../..');
 const isDebug = ['1', 'true', 'yes'].includes(String(process.env.PWDEBUG || '').toLowerCase());
@@ -277,53 +278,105 @@ After(async function ({ result, pickle }) {
     this.page = null;
   }
 
-  if (!video || !settings?.recordVideo) {
-    return;
+  // Close dedicated Yopmail browser and capture its video (separate from app tab video).
+  let yopmailVideoPath = null;
+  if (this.yopmailBrowser || this.yopmailContext || this.yopmailPage) {
+    yopmailVideoPath = await closeYopmailSession(this);
   }
 
+  if (settings?.recordVideo && shouldAttach) {
+    await persistScenarioVideo({
+      world: this,
+      settings,
+      video,
+      statusLabel,
+      scenarioName,
+      labelSuffix: '',
+    });
+    if (yopmailVideoPath) {
+      await persistScenarioVideo({
+        world: this,
+        settings,
+        rawPath: yopmailVideoPath,
+        statusLabel,
+        scenarioName,
+        labelSuffix: '-yopmail',
+        displaySuffix: ' (Yopmail)',
+      });
+    }
+  } else {
+    await discardVideoFile(video);
+    if (yopmailVideoPath && fs.existsSync(yopmailVideoPath)) {
+      fs.unlinkSync(yopmailVideoPath);
+    }
+  }
+});
+
+async function discardVideoFile(video) {
+  if (!video) return;
   try {
     const rawPath = await video.path();
-    if (!rawPath || !fs.existsSync(rawPath)) {
-      return;
-    }
+    if (rawPath && fs.existsSync(rawPath)) fs.unlinkSync(rawPath);
+  } catch {
+    // ignore
+  }
+}
 
-    if (!shouldAttach) {
-      fs.unlinkSync(rawPath);
+/**
+ * Persist a Playwright video file, attach to Cucumber, and index for the HTML gallery.
+ */
+async function persistScenarioVideo({
+  world,
+  settings,
+  video = null,
+  rawPath = null,
+  statusLabel,
+  scenarioName,
+  labelSuffix = '',
+  displaySuffix = '',
+}) {
+  try {
+    let sourcePath = rawPath;
+    if (!sourcePath && video) {
+      sourcePath = await video.path();
+    }
+    if (!sourcePath || !fs.existsSync(sourcePath)) {
       return;
     }
 
     const artifactKey = `${settings.browser.name}-${settings.deviceName}`;
     const videoDir =
-      this._videoDir || path.resolve(REPO_ROOT, settings.videoDir, artifactKey);
+      (labelSuffix.includes('yopmail') && world._yopmailVideoDir) ||
+      world._videoDir ||
+      path.resolve(REPO_ROOT, settings.videoDir, artifactKey);
     ensureDir(videoDir);
 
     const namedPath = path.join(
       videoDir,
-      `${statusLabel}-${safeFilePart(scenarioName)}-${Date.now()}.webm`,
+      `${statusLabel}-${safeFilePart(scenarioName)}${labelSuffix}-${Date.now()}.webm`,
     );
-    fs.renameSync(rawPath, namedPath);
+    fs.renameSync(sourcePath, namedPath);
 
     const relativePath = path.relative(REPO_ROOT, namedPath);
     videoIndex.push({
       status: statusLabel,
-      scenario: scenarioName,
+      scenario: `${scenarioName}${displaySuffix}`,
       filePath: namedPath,
       relativePath,
     });
 
-    if (typeof this.attach === 'function') {
-      // Embedded in Cucumber HTML report for pass and fail.
-      await this.attach(
-        fs.readFileSync(namedPath),
-        'video/webm',
+    if (typeof world.attach === 'function') {
+      await world.attach(fs.readFileSync(namedPath), 'video/webm');
+      await world.attach(
+        `Video (${statusLabel}${displaySuffix}): ${relativePath}`,
+        'text/plain',
       );
-      await this.attach(`Video (${statusLabel}): ${relativePath}`, 'text/plain');
     }
-    console.log(`[video] ${statusLabel} ${scenarioName} → ${relativePath}`);
+    console.log(`[video] ${statusLabel}${displaySuffix} ${scenarioName} → ${relativePath}`);
   } catch (err) {
     console.warn(`[video] Failed to persist/attach recording: ${err.message}`);
   }
-});
+}
 
 AfterStep(async function ({ pickleStep, result }) {
   if (result.status !== Status.FAILED || !this.page) {
