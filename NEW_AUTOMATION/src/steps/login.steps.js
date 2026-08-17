@@ -17,6 +17,11 @@ When('I open the login modal', async function () {
   await login(this).openLoginModal();
 });
 
+When('I open the login modal at checkout page', async function () {
+  await login(this).openLoginModal_checkoutPage();
+});
+
+
 When('I sign in with configured credentials', async function () {
   this.settings.requireCredentials();
   await login(this).submitLogin(this.settings.appUsername, this.settings.appPassword);

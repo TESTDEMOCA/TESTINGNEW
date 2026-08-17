@@ -17,7 +17,7 @@ const REPO_ROOT = path.join(__dirname, '../..');
 const isDebug = ['1', 'true', 'yes'].includes(String(process.env.PWDEBUG || '').toLowerCase());
 const slowMo = Math.max(0, Number(process.env.SLOW_MO || (isDebug ? 1000 : 0)) || 0);
 
-setDefaultTimeout((isDebug ? 600 : 180) * 1000);
+setDefaultTimeout((isDebug ? 600 : 300) * 1000);
 
 let sharedBrowser;
 /** @type {{ status: string, scenario: string, filePath: string, relativePath: string }[]} */
@@ -105,6 +105,10 @@ BeforeAll(async function () {
     args: [
       // Keep cross-subdomain checkout cookies usable during guest -> uat-booking handoff.
       '--disable-features=ThirdPartyStoragePartitioning',
+      // Avoid stale currency/destination from prior runs.
+      '--disable-application-cache',
+      '--disk-cache-size=1',
+      '--media-cache-size=1',
     ],
   });
 });
@@ -118,6 +122,7 @@ AfterAll(async function () {
   }
   if (sharedBrowser) {
     await sharedBrowser.close();
+    sharedBrowser = null;
   }
 });
 
@@ -127,7 +132,11 @@ Before(async function () {
   this.device = this.settings.deviceName;
   this.browserName = this.settings.browser.name;
 
-  const contextOptions = this.settings.contextOptions();
+  // Brand-new context every scenario (isolated cookies/storage).
+  const contextOptions = {
+    ...this.settings.contextOptions(),
+    storageState: undefined,
+  };
   const artifactKey = `${this.settings.browser.name}-${this.settings.deviceName}`;
 
   if (this.settings.recordVideo) {
@@ -144,7 +153,103 @@ Before(async function () {
   this.page = await this.context.newPage();
   this.page.setDefaultTimeout(90_000);
   this.page.setDefaultNavigationTimeout(90_000);
+
+  // Mandatory wipe before every scenario/run.
+  await clearBrowserSession(this.context, this.page, this.settings);
 });
+
+/**
+ * Wipe cookies, cache, and site storage before every scenario.
+ */
+async function clearBrowserSession(context, page, settings) {
+  const baseUrl = settings.baseUrl || '';
+  const origins = [
+    safeOrigin(baseUrl),
+    safeOrigin(settings.lmsBaseUrl),
+    'https://uat-booking.plazapremiumlounge.com',
+    'https://www.ppl2-stg.plazapremiumlounge.com',
+    'https://assets-qa.plazapremiumlounge.com',
+  ].filter(Boolean);
+
+  await context.clearCookies();
+  await context.clearPermissions();
+
+  let client;
+  try {
+    client = await context.newCDPSession(page);
+    await client.send('Network.enable');
+    await client.send('Network.clearBrowserCookies');
+    await client.send('Network.clearBrowserCache');
+    await client.send('Storage.clearCookies').catch(() => {});
+  } catch (err) {
+    console.warn(`[session] CDP cache/cookie clear skipped: ${err.message}`);
+  }
+
+  // Visit site origin so local/session storage + Cache Storage can be wiped.
+  const primary = safeOrigin(baseUrl) || origins[0];
+  if (primary) {
+    try {
+      await page.goto(primary, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+      await page.evaluate(async () => {
+        try {
+          localStorage.clear();
+          sessionStorage.clear();
+        } catch {}
+        try {
+          if (window.indexedDB && indexedDB.databases) {
+            const dbs = await indexedDB.databases();
+            await Promise.all(
+              (dbs || [])
+                .filter((d) => d && d.name)
+                .map(
+                  (d) =>
+                    new Promise((resolve) => {
+                      const req = indexedDB.deleteDatabase(d.name);
+                      req.onsuccess = req.onerror = req.onblocked = () => resolve();
+                    }),
+                ),
+            );
+          }
+        } catch {}
+        try {
+          if (window.caches && caches.keys) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((k) => caches.delete(k)));
+          }
+        } catch {}
+      });
+    } catch (err) {
+      console.warn(`[session] Origin visit/storage clear skipped: ${err.message}`);
+    }
+  }
+
+  if (client) {
+    for (const origin of [...new Set(origins)]) {
+      try {
+        await client.send('Storage.clearDataForOrigin', {
+          origin,
+          storageTypes:
+            'appcache,cookies,file_systems,indexeddb,local_storage,shader_cache,websql,service_workers,cache_storage',
+        });
+      } catch {
+        // Origin may not have been visited yet — ignore.
+      }
+    }
+    await client.send('Network.clearBrowserCookies').catch(() => {});
+    await client.send('Network.clearBrowserCache').catch(() => {});
+  }
+
+  await context.clearCookies();
+  console.log('[session] Cleared cookies, cache, and storage before scenario');
+}
+
+function safeOrigin(url) {
+  try {
+    return url ? new URL(url).origin : '';
+  } catch {
+    return '';
+  }
+}
 
 After(async function ({ result, pickle }) {
   const failed = result?.status === Status.FAILED;
@@ -157,6 +262,16 @@ After(async function ({ result, pickle }) {
     ((failed && settings.attachVideoOnFail) || (!failed && settings.attachVideoOnPass));
 
   if (this.context) {
+    try {
+      await this.context.clearCookies();
+      if (this.page) {
+        const client = await this.context.newCDPSession(this.page).catch(() => null);
+        if (client) {
+          await client.send('Network.clearBrowserCookies').catch(() => {});
+          await client.send('Network.clearBrowserCache').catch(() => {});
+        }
+      }
+    } catch {}
     await this.context.close();
     this.context = null;
     this.page = null;

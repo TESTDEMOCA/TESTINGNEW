@@ -3,6 +3,7 @@ const { BasePage } = require('./basePage');
 
 class LoginPage extends BasePage {
   static OPEN_LOGIN = 'a[data-bs-target="#userLogin"]';
+  static OPEN_LOGIN_CP = '(//a[@data-bs-target="#userLogin"])[3]';
   static MODAL = '#userLogin';
   static MODAL_CONTENT = '#userLogin .modal-content';
   static MODAL_TITLE = '#userLogin .modal-title';
@@ -41,6 +42,16 @@ class LoginPage extends BasePage {
     const loginLink = this.page.locator(LoginPage.OPEN_LOGIN).nth(1);
     await expect(loginLink).toBeVisible({ timeout: 30_000 });
     await loginLink.click();
+
+    await expect(this.page.locator(LoginPage.MODAL_CONTENT)).toBeVisible({ timeout: 15_000 });
+    await expect(this.page.locator(LoginPage.EMAIL)).toBeVisible({ timeout: 15_000 });
+    await expect(this.page.locator(LoginPage.PASSWORD)).toBeVisible({ timeout: 15_000 });
+  }
+  
+   async openLoginModal_checkoutPage() {
+    const loginLink_cp = this.page.locator(LoginPage.OPEN_LOGIN_CP);
+    await expect(loginLink_cp).toBeVisible({ timeout: 30_000 });
+    await loginLink_cp.click();
 
     await expect(this.page.locator(LoginPage.MODAL_CONTENT)).toBeVisible({ timeout: 15_000 });
     await expect(this.page.locator(LoginPage.EMAIL)).toBeVisible({ timeout: 15_000 });
