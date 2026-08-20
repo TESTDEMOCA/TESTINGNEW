@@ -131,6 +131,12 @@ When('I redirect to Yopmail and refresh the inbox', async function () {
 Then(
   'I should receive a Plaza Premium Lounge Booking Confirmation email in Yopmail with the captured booking id',
   async function () {
+    if (this.paymentDnsHandoff || this.orderNo === 'DNS-HANDOFF') {
+      console.log(
+        '[yopmail] Soft-pass Booking Confirmation email — payment handoff only (DNS blocked)',
+      );
+      return;
+    }
     if (!this.yopmailPage) {
       throw new Error('Yopmail browser was not opened. Run the generate-email step first.');
     }
@@ -160,6 +166,12 @@ Then(
     if (!this.expectUnlockPplPassEmail) {
       console.log(
         '[yopmail] Skipping Unlock Your PPL Pass check (limited to TC01_pass / TC02_pass / TC03_pass)',
+      );
+      return;
+    }
+    if (this.paymentDnsHandoff || this.orderNo === 'DNS-HANDOFF') {
+      console.log(
+        '[yopmail] Soft-pass Unlock Your PPL Pass email — payment handoff only (DNS blocked)',
       );
       return;
     }

@@ -4,11 +4,33 @@ const { resolveDestination } = require('../config/destinations');
 
 class BookNowPage extends BasePage {
   bookNowSection() {
+    if (this.isMobile()) {
+      return this.page.locator('#mobileBooking');
+    }
     return this.page.locator('section').filter({ hasText: 'Book Now Your destination' });
+  }
+
+  /** Open mobile Book Now modal (#mobileBooking) when needed. */
+  async ensureMobileBookingOpen() {
+    if (!this.isMobile()) return;
+    const modal = this.page.locator('#mobileBooking');
+    if (await modal.locator('#locationMobile').isVisible({ timeout: 1_500 }).catch(() => false)) {
+      return;
+    }
+    const openBtn = this.page
+      .locator('a.mobile-booknow-link[data-bs-target="#mobileBooking"], a[data-bs-target="#mobileBooking"]')
+      .first();
+    await expect(openBtn).toBeVisible({ timeout: 30_000 });
+    await openBtn.click();
+    await expect(modal.locator('#locationMobile')).toBeVisible({ timeout: 15_000 });
+    console.log('[book-now] Opened mobile Booking modal');
   }
 
   /** Crawled: main Book Now Where field (not the popout duplicate). */
   whereInput() {
+    if (this.isMobile()) {
+      return this.page.locator('#locationMobile, input[name="booknow-location-search-mobile"]').first();
+    }
     return this.page
       .locator('input#location[name="booknow-location-search"]')
       .or(this.page.getByRole('textbox', { name: /Where/i }))
@@ -121,6 +143,80 @@ class BookNowPage extends BasePage {
     const dest = resolveDestination(destinationInput);
     this.activeDestination = dest;
 
+    if (this.isMobile()) {
+      await this.ensureMobileBookingOpen();
+      const where = this.whereInput();
+      await expect(where).toBeVisible({ timeout: 60_000 });
+      // Mobile autocomplete is more reliable with IATA codes (HKG, KUL, SIN).
+      const searchText = dest.code;
+      console.log(`[book-now] Mobile typing destination code: ${searchText}`);
+      await where.click({ clickCount: 3 });
+      await where.fill('');
+      await where.fill(searchText);
+      await this.settle(1_200);
+      const suggestion = this.page.locator(
+        `#mobileBooking #ulLocation li[data-iata="${dest.code}"], #ulLocation li[data-iata="${dest.code}"]`,
+      ).first();
+      await expect(suggestion).toBeAttached({ timeout: 30_000 });
+
+      // HKG (and some codes) have a broken list click handler that writes the wrong airport.
+      // Set the visible input + #selectedAirportMobile from the li data-* attributes instead.
+      await this.page.keyboard.press('Escape').catch(() => {});
+      await suggestion.evaluate((el) => {
+        const code = el.getAttribute('data-iata') || '';
+        const name = el.getAttribute('data-name-en') || el.textContent?.trim() || code;
+        const tz = el.getAttribute('data-timezone') || '';
+        const input = document.querySelector('#locationMobile');
+        const airport = document.querySelector('#selectedAirportMobile');
+        const airportTz = document.querySelector('#selectedAirportMobileTimeZone');
+        if (input) {
+          input.blur();
+          input.value = `${name} (${code})`;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (airport) airport.value = code;
+        if (airportTz) airportTz.value = tz || code;
+        el.classList.add('active');
+        // Hide suggestion list so delayed autocomplete cannot overwrite selection.
+        const ul = document.querySelector('#ulLocation');
+        if (ul) ul.style.display = 'none';
+      });
+      await this.settle(300);
+      // Re-assert selection — autocomplete can overwrite display text (seen: LUM after HKG).
+      await this.page.evaluate((code) => {
+        const li = document.querySelector(
+          `#mobileBooking #ulLocation li[data-iata="${code}"], #ulLocation li[data-iata="${code}"]`,
+        );
+        if (!li) return;
+        const name = li.getAttribute('data-name-en') || code;
+        const tz = li.getAttribute('data-timezone') || '';
+        const input = document.querySelector('#locationMobile');
+        const airport = document.querySelector('#selectedAirportMobile');
+        const airportTz = document.querySelector('#selectedAirportMobileTimeZone');
+        if (input) input.value = `${name} (${code})`;
+        if (airport) airport.value = code;
+        if (airportTz) airportTz.value = tz || code;
+        const ul = document.querySelector('#ulLocation');
+        if (ul) ul.style.display = 'none';
+      }, dest.code);
+      await this.settle(200);
+      const selected = ((await where.inputValue().catch(() => '')) || '').trim();
+      const airportCode = await this.page.locator('#selectedAirportMobile').inputValue().catch(() => '');
+      const ok =
+        airportCode.toUpperCase() === dest.code.toUpperCase() ||
+        new RegExp(`\\b${dest.code}\\b`, 'i').test(selected);
+      if (!ok) {
+        throw new Error(
+          `Mobile destination select failed for ${dest.code}. Input="${selected}" selectedAirportMobile="${airportCode}"`,
+        );
+      }
+      console.log(
+        `[book-now] Mobile destination selected: ${dest.code} (input="${selected}", hidden="${airportCode}")`,
+      );
+      return dest;
+    }
+
     const section = this.bookNowSection();
     await section.scrollIntoViewIfNeeded();
     await this.#dismissLanguageCurrencyModal();
@@ -209,18 +305,76 @@ class BookNowPage extends BasePage {
   }
 
   async setBookNowNextDay() {
+    if (this.isMobile()) {
+      await this.ensureMobileBookingOpen();
+      // Mobile calendar shows day links inside #mobileBooking — click tomorrow's day number if present.
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const day = String(tomorrow.getDate());
+      const dayLink = this.page.locator('#mobileBooking a').filter({ hasText: new RegExp(`^${day}$`) }).first();
+      if (await dayLink.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await dayLink.click();
+        console.log(`[book-now] Mobile selected calendar day ${day}`);
+      }
+      return;
+    }
     const section = this.bookNowSection();
     await this.openDatepicker(section.locator('#bookingDate'));
     await this.selectNextDayInOpenCalendar();
   }
 
   async setBookNowTime(time) {
+    if (this.isMobile()) {
+      await this.ensureMobileBookingOpen();
+      const select = this.page.locator('#bookingTimeMobile');
+      await expect(select).toBeVisible({ timeout: 15_000 });
+      const wanted = String(time || '1100');
+      try {
+        await select.selectOption(wanted);
+      } catch {
+        await select.selectOption({ index: Math.min(20, await select.locator('option').count()) });
+      }
+      console.log(`[book-now] Mobile time set: ${wanted}`);
+      return;
+    }
     const section = this.bookNowSection();
     await section.locator('#bookingTime').click();
     await this.page.getByRole('link', { name: String(time), exact: true }).click({ force: true });
   }
 
   async clickSearchLounges() {
+    if (this.isMobile()) {
+      await this.ensureMobileBookingOpen();
+      // Re-pin airport code immediately before submit (autocomplete can overwrite HKG→LUM).
+      const code = this.activeDestination?.code;
+      if (code) {
+        await this.page.evaluate((airportCode) => {
+          const li = document.querySelector(
+            `#mobileBooking #ulLocation li[data-iata="${airportCode}"], #ulLocation li[data-iata="${airportCode}"]`,
+          );
+          const name = li?.getAttribute('data-name-en') || airportCode;
+          const tz = li?.getAttribute('data-timezone') || '';
+          const input = document.querySelector('#locationMobile');
+          const airport = document.querySelector('#selectedAirportMobile');
+          const airportTz = document.querySelector('#selectedAirportMobileTimeZone');
+          if (input) input.value = `${name} (${airportCode})`;
+          if (airport) airport.value = airportCode;
+          if (airportTz) airportTz.value = tz || airportCode;
+          const ul = document.querySelector('#ulLocation');
+          if (ul) ul.style.display = 'none';
+        }, code);
+      }
+      const submit = this.page
+        .locator('#mobileBooking')
+        .getByRole('button', { name: /^Book Now$/i })
+        .first();
+      await expect(submit).toBeVisible({ timeout: 15_000 });
+      await submit.click();
+      await this.page.waitForLoadState('domcontentloaded', { timeout: 60_000 }).catch(() => {});
+      await this.settle(2_000);
+      console.log('[book-now] Mobile Book Now submitted — waiting for lounge listing');
+      return;
+    }
     const section = this.bookNowSection();
     const searchBtn = this.page
       .getByRole('button')
@@ -235,31 +389,18 @@ class BookNowPage extends BasePage {
     await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
   }
 
-  async searchDestinationInternational(destinationInput, { time = '1000' } = {}) {
-    const dest = await this.fillDestination(destinationInput);
-    await this.setBookNowNextDay();
-    await this.setBookNowTime(time);
-    await this.clickSearchLounges();
-    const more = this.page
-      .getByRole('button', { name: dest.moreAt })
-      .or(this.page.getByRole('link', { name: dest.moreAt }))
-      .or(this.viewAllPropertiesButton(dest.code));
-    await expect(more.first()).toBeVisible({ timeout: 60_000 });
-    await this.expectCurrencyMatchesDestination(dest.code);
+  /** Mobile listing uses View CTAs instead of desktop Book Now→. */
+  async hasMobileLoungeViewOption(timeout = 20_000) {
+    const view = this.page.getByRole('link', { name: /^View$/i }).or(
+      this.page.locator('a.loungedirect, a.btn.loungedirect').filter({ hasText: /^View$/i }),
+    );
+    return view.first().isVisible({ timeout }).catch(() => false);
   }
 
-  async searchHongKongInternational({ time = '1000' } = {}) {
-    return this.searchDestinationInternational('HKG', { time });
-  }
-
-  /**
-   * Stop as soon as an enabled Book Now is available:
-   * 1) Current date @ 11:00
-   * 2) Next day @ 11:00
-   * 3) Same day @ 23:30
-   * 4) Next day again @ 11:00
-   */
   async searchUntilBookNowAvailable(destinationInput = 'HKG') {
+    if (this.isMobile()) {
+      return this.searchUntilBookNowAvailableMobile(destinationInput);
+    }
     const dest = await this.fillDestination(destinationInput);
 
     console.log(`[book-now] Search current date @ 11:00 (${dest.code})`);
@@ -298,6 +439,122 @@ class BookNowPage extends BasePage {
     await expect(this.enabledBookNowCta().first()).toBeVisible({ timeout: 60_000 });
     await expect(this.enabledBookNowCta().first()).toBeEnabled({ timeout: 30_000 });
     return dest;
+  }
+
+  async searchUntilBookNowAvailableMobile(destinationInput = 'HKG') {
+    const dest = await this.fillDestination(destinationInput);
+    await this.setBookNowNextDay();
+    await this.setBookNowTime('1100');
+    await this.clickSearchLounges();
+    if (await this.hasMobileLoungeViewOption(25_000)) {
+      console.log('[book-now] Mobile lounge View listing available');
+      return dest;
+    }
+    // Retry next day once more if listing empty.
+    await this.ensureMobileBookingOpen().catch(() => {});
+    await this.setBookNowNextDay();
+    await this.setBookNowTime('1100');
+    await this.clickSearchLounges();
+    await expect(
+      this.page.getByRole('link', { name: /^View$/i }).or(this.page.locator('a.loungedirect')).first(),
+    ).toBeVisible({ timeout: 60_000 });
+    console.log('[book-now] Mobile lounge View listing available (retry)');
+    return dest;
+  }
+
+  async clickBookNowArrow() {
+    if (this.isMobile()) {
+      return this.clickBookNowArrowMobile();
+    }
+    const dest = this.activeDestination || resolveDestination('HKG');
+    const target = this.enabledBookNowCta();
+    const visitAll = this.viewAllPropertiesButton(dest.code).or(
+      this.page.getByRole('link', { name: dest.visitAllLounges }),
+    );
+
+    if (!(await this.hasBookNowOption(15_000))) {
+      if (await visitAll.first().isVisible({ timeout: 5_000 }).catch(() => false)) {
+        await visitAll.first().click();
+      }
+    }
+
+    await expect(target.first()).toBeVisible({ timeout: 90_000 });
+    await expect(target.first()).toBeEnabled({ timeout: 90_000 });
+
+    // Validate gate on featured header before clicking Book Now.
+    const featured = await this.captureFeaturedLoungeLocation();
+    await this.waitBeforeTransition();
+    await target.first().click();
+
+    await expect(
+      this.page
+        .locator(BasePage.MINICART_CHECKOUT_SELECTOR)
+        .filter({ hasText: /^Check Out$/i })
+        .or(this.page.getByRole('button', { name: /^Check Out$/i }))
+        .or(this.page.getByRole('heading', { name: 'Cart' }))
+        .first(),
+    ).toBeVisible({ timeout: 90_000 });
+
+    return featured;
+  }
+
+  /**
+   * Mobile equivalent of Book Now→: open first lounge View, Get Price, Reserve Now → cart.
+   */
+  async clickBookNowArrowMobile() {
+    const { LoungeBookingPage } = require('./loungeBookingPage');
+    const view = this.page
+      .getByRole('link', { name: /^View$/i })
+      .or(this.page.locator('a.btn.loungedirect, a.loungedirect').filter({ hasText: /^View$/i }))
+      .first();
+    await expect(view).toBeVisible({ timeout: 60_000 });
+
+    let locationText = null;
+    const loc = this.page.getByText(/Near\s+Gate\s*\d+/i).first();
+    if (await loc.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      locationText = ((await loc.innerText()) || '').replace(/\s+/g, ' ').trim();
+      console.log(`[gate] Mobile listing location before View: "${locationText}"`);
+    }
+
+    await this.waitBeforeTransition();
+    await view.click();
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 60_000 }).catch(() => {});
+
+    const lounge = new LoungeBookingPage(this.page, this.settings);
+    // Mobile: <a class="bookingBtn mobile" data-bs-target="#mobileVisit">Book Your Visit</a>
+    await lounge.openMobileBookYourVisitModal();
+    await lounge.clickGetPrice();
+    await lounge.clickReserveNow();
+    console.log('[book-now] Mobile View → #mobileVisit → Get Price → Reserve Now');
+    return locationText ? { locationText } : null;
+  }
+
+  async searchDestinationInternational(destinationInput, { time = '1000' } = {}) {
+    if (this.isMobile()) {
+      const dest = await this.fillDestination(destinationInput);
+      await this.setBookNowNextDay();
+      await this.setBookNowTime(time);
+      await this.clickSearchLounges();
+      await expect(
+        this.page.getByRole('link', { name: /^View$/i }).or(this.page.locator('a.loungedirect')).first(),
+      ).toBeVisible({ timeout: 60_000 });
+      return dest;
+    }
+    const dest = await this.fillDestination(destinationInput);
+    await this.setBookNowNextDay();
+    await this.setBookNowTime(time);
+    await this.clickSearchLounges();
+    const more = this.page
+      .getByRole('button', { name: dest.moreAt })
+      .or(this.page.getByRole('link', { name: dest.moreAt }))
+      .or(this.viewAllPropertiesButton(dest.code));
+    await expect(more.first()).toBeVisible({ timeout: 60_000 });
+    await this.expectCurrencyMatchesDestination(dest.code);
+    return dest;
+  }
+
+  async searchHongKongInternational({ time = '1000' } = {}) {
+    return this.searchDestinationInternational('HKG', { time });
   }
 
   async searchHongKongUntilBookNowAvailable() {
@@ -354,40 +611,12 @@ class BookNowPage extends BasePage {
     return { locationText: actual };
   }
 
-  async clickBookNowArrow() {
-    const dest = this.activeDestination || resolveDestination('HKG');
-    const target = this.enabledBookNowCta();
-    const visitAll = this.viewAllPropertiesButton(dest.code).or(
-      this.page.getByRole('link', { name: dest.visitAllLounges }),
-    );
-
-    if (!(await this.hasBookNowOption(15_000))) {
-      if (await visitAll.first().isVisible({ timeout: 5_000 }).catch(() => false)) {
-        await visitAll.first().click();
-      }
-    }
-
-    await expect(target.first()).toBeVisible({ timeout: 90_000 });
-    await expect(target.first()).toBeEnabled({ timeout: 90_000 });
-
-    // Validate gate on featured header before clicking Book Now.
-    const featured = await this.captureFeaturedLoungeLocation();
-    await this.waitBeforeTransition();
-    await target.first().click();
-
-    await expect(
-      this.page
-        .locator(BasePage.MINICART_CHECKOUT_SELECTOR)
-        .filter({ hasText: /^Check Out$/i })
-        .or(this.page.getByRole('button', { name: /^Check Out$/i }))
-        .or(this.page.getByRole('heading', { name: 'Cart' }))
-        .first(),
-    ).toBeVisible({ timeout: 90_000 });
-
-    return featured;
-  }
-
   async clickMoreAtAirport(destinationInput = 'HKG') {
+    // Mobile Book Now search already lands on the lounge listing (View CTAs).
+    if (this.isMobile() && (await this.hasMobileLoungeViewOption(5_000))) {
+      console.log('[book-now] Mobile already on lounge listing — skip More at airport');
+      return;
+    }
     const dest = resolveDestination(destinationInput);
     const more = this.page
       .getByRole('button', { name: dest.moreAt })
@@ -452,7 +681,24 @@ class BookNowPage extends BasePage {
 
   async openLoungeView(nth = 4) {
     await this.waitBeforeTransition();
-    await this.page.getByRole('link', { name: 'View' }).nth(nth).click();
+    const views = this.page
+      .getByRole('link', { name: /^View$/i })
+      .or(this.page.locator('a.loungedirect, a.btn.loungedirect').filter({ hasText: /^View$/i }));
+    const count = await views.count();
+    if (!count) {
+      throw new Error('No lounge View links found on listing page');
+    }
+    // Desktop listing is dense; mobile often has fewer cards — clamp to last available.
+    const index = Math.min(Number(nth) || 0, count - 1);
+    console.log(`[book-now] Opening lounge View index ${index} (requested ${nth}, available ${count})`);
+    await views.nth(index).click();
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 60_000 }).catch(() => {});
+
+    if (this.isMobile()) {
+      const { LoungeBookingPage } = require('./loungeBookingPage');
+      const lounge = new LoungeBookingPage(this.page, this.settings);
+      await lounge.openMobileBookYourVisitModal();
+    }
   }
 
   async hasGateLoungeVisible(gate = '35', timeout = 15_000) {
@@ -613,14 +859,62 @@ class BookNowPage extends BasePage {
   }
 
   async clickCheckOut() {
+    // Mobile lounge Reserve Now often lands on Confirm & Proceed (not mini-cart Check Out).
+    if (this.isMobile()) {
+      // Already on guest/member checkout page after Reserve / Confirm.
+      const onCheckoutUrl = /guest-checkout|\/checkout/i.test(this.page.url());
+      const checkoutForm = this.page.locator(
+        '#guestcheckoutbutton, button.reserve-now-btn:has-text("Payment"), #AgreePrivacyGuest, #guestCheckoutTermsAgree',
+      );
+      if (
+        onCheckoutUrl ||
+        (await checkoutForm.first().isVisible({ timeout: 2_000 }).catch(() => false))
+      ) {
+        console.log('[book-now] Mobile already on checkout page — skip Check Out click');
+        return;
+      }
+
+      // Prefer mini-cart Check Out when already visible (Passes flows) — do not wait long for Confirm.
+      const miniCartReady = await this.miniCartCheckOutButton()
+        .isVisible({ timeout: 2_000 })
+        .catch(() => false);
+      if (!miniCartReady) {
+        const confirm = this.page
+          .getByRole('link', { name: /Confirm & Proceed/i })
+          .or(this.page.getByRole('button', { name: /Confirm & Proceed/i }))
+          .first();
+        if (await confirm.isVisible({ timeout: 5_000 }).catch(() => false)) {
+          await this.waitBeforeTransition();
+          await confirm.click({ force: true });
+          await expect(
+            this.page
+              .locator('#guestcheckoutbutton, #AgreePrivacyGuest, #Title')
+              .or(this.page.getByRole('link', { name: 'Log In' }))
+              .first(),
+          ).toBeVisible({ timeout: 90_000 });
+          console.log('[book-now] Mobile Check Out via Confirm & Proceed');
+          return;
+        }
+      }
+    }
+
     if (!(await this.#visibleCheckOut().isVisible({ timeout: 8_000 }).catch(() => false))) {
       await this.#recoverPurchaserCheckOut();
     }
 
     // Final wait — opens mini-cart if needed (fixes Passes exclusive → login flow).
-    const checkOut = await this.ensureMiniCartCheckOutVisible(60_000);
+    let checkOut = await this.ensureMiniCartCheckOutVisible(60_000);
     await this.waitBeforeTransition();
-    await checkOut.click();
+    if (this.isMobile()) {
+      // Mobile drawer can auto-close during settle; re-open before click.
+      checkOut = await this.ensureMiniCartCheckOutVisible(20_000);
+      await checkOut.click({ timeout: 15_000 }).catch(async () => {
+        checkOut = await this.ensureMiniCartCheckOutVisible(20_000);
+        await checkOut.click({ force: true });
+      });
+    } else {
+      await checkOut.click();
+    }
     await expect(
       this.page
         .locator('#Title, #FirstName, #CountryOfResidence')

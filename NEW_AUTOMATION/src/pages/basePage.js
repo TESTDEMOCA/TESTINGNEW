@@ -14,10 +14,28 @@ class BasePage {
   static MINICART_CHECKOUT_SELECTOR =
     'button.btn.btn-primary.fullWidth.flat-btn.js-minicart-checkout-upsell[data-guest-checkout-url="/en-uk/guest-checkout"], button.js-minicart-checkout-upsell[data-guest-checkout-url="/en-uk/guest-checkout"]';
 
+  /** Mobile hamburger used across locations / home / passes. */
+  static MOBILE_NAV_TOGGLE = '#wsnavtoggle';
+
   constructor(page, settings) {
     this.page = page;
     this.settings = settings;
     this.actions = new ActionEngine(page);
+  }
+
+  isMobile() {
+    return Boolean(this.settings?.device?.isMobile || this.settings?.deviceName === 'mobile');
+  }
+
+  /** Open the mobile slide-out nav when needed (body gets class wsactive). */
+  async openMobileNavIfNeeded() {
+    if (!this.isMobile()) return;
+    const toggle = this.page.locator(BasePage.MOBILE_NAV_TOGGLE).first();
+    await expect(toggle).toBeVisible({ timeout: 30_000 });
+    const alreadyOpen = await this.page.locator('body.wsactive').count();
+    if (alreadyOpen) return;
+    await toggle.click();
+    await expect(this.page.locator('body.wsactive')).toBeVisible({ timeout: 10_000 });
   }
 
   /** Visible mini-cart Check Out button (preferred locator + text fallback). */
@@ -26,6 +44,7 @@ class BasePage {
       .locator(BasePage.MINICART_CHECKOUT_SELECTOR)
       .filter({ hasText: /^Check Out$/i })
       .or(this.page.getByRole('button', { name: /^Check Out$/i }))
+      .filter({ visible: true })
       .first();
   }
 
@@ -34,11 +53,27 @@ class BasePage {
    * Passes / exclusive-login flows often leave the cart closed after modal login.
    */
   async ensureMiniCartCheckOutVisible(timeoutMs = 45_000) {
-    const checkOut = this.miniCartCheckOutButton();
     const deadline = Date.now() + timeoutMs;
 
-    // Close leftover login / dialogs that can hide the cart.
+    // Close leftover login / pass-error dialogs that intercept Check Out clicks.
     await this.page.keyboard.press('Escape').catch(() => {});
+    const passErr = this.page.locator('#passPageErrorModal.show, #passPageErrorModal.modal.show').first();
+    if (await passErr.isVisible({ timeout: 800 }).catch(() => false)) {
+      await this.page
+        .locator('#passPageErrorModal button, #passPageErrorModal [data-bs-dismiss="modal"]')
+        .filter({ hasText: /^OK$/i })
+        .or(this.page.locator('#passPageErrorModal [data-bs-dismiss="modal"]'))
+        .first()
+        .click({ force: true })
+        .catch(() => {});
+      await this.page.evaluate(() => {
+        document.querySelectorAll('#passPageErrorModal, .modal-backdrop').forEach((el) => {
+          el.classList.remove('show');
+          el.style.display = 'none';
+        });
+        document.body.classList.remove('modal-open');
+      });
+    }
     await this.page
       .locator('#userLogin.show, .modal-backdrop')
       .first()
@@ -46,6 +81,7 @@ class BasePage {
       .catch(() => {});
 
     while (Date.now() < deadline) {
+      const checkOut = this.miniCartCheckOutButton();
       if (await checkOut.isVisible({ timeout: 800 }).catch(() => false)) {
         console.log('[cart] Check Out button is visible');
         return checkOut;
@@ -64,9 +100,10 @@ class BasePage {
       for (const toggle of toggles) {
         if (await toggle.isVisible({ timeout: 400 }).catch(() => false)) {
           await toggle.click().catch(() => {});
-          if (await checkOut.isVisible({ timeout: 3_000 }).catch(() => false)) {
+          const opened = this.miniCartCheckOutButton();
+          if (await opened.isVisible({ timeout: 3_000 }).catch(() => false)) {
             console.log('[cart] Opened mini-cart — Check Out visible');
-            return checkOut;
+            return opened;
           }
         }
       }

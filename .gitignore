@@ -5,3 +5,12 @@ jmeter/results/*
 # JMeter dist in tools (pipeline downloads its own; local: extract here or set JMETER_HOME)
 jmeter/tools/apache-jmeter-*
 jmeter/tools/*.tgz
+
+# NEW_AUTOMATION local artifacts
+NEW_AUTOMATION/node_modules/
+NEW_AUTOMATION/reports/
+NEW_AUTOMATION/.env
+NEW_AUTOMATION/.env.*
+NEW_AUTOMATION/.cursor/
+NEW_AUTOMATION/*.zip
+NEW_AUTOMATION/.push-staging/

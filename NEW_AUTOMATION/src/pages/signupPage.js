@@ -57,6 +57,26 @@ class SignupPage extends BasePage {
       });
     }
 
+    if (this.isMobile()) {
+      // Mobile sign-up form uses distinct ids (desktop roles still exist but Create is hidden).
+      await this.page.locator('#SignUpFirstName, #FirstName').first().fill(firstName);
+      await this.page.locator('#LastName').first().fill(lastName);
+      const countrySelect = this.page.locator('#CountryOfResidence').first();
+      await expect(countrySelect).toBeVisible({ timeout: 15_000 });
+      await countrySelect.selectOption(country);
+      await this.page.locator(SignupPage.PHONE).fill(phone);
+      await this.page.locator('#EmailAddress').first().fill(email);
+      await this.page.locator('#ConfirmEmailAddress').first().fill(email);
+      const marketing = this.page.locator('#SubscribeNewsletter, #ReceiveOffers').first();
+      if (await marketing.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await marketing.check().catch(() => {});
+      }
+      await this.page.locator(SignupPage.AGREE_TNC).check();
+      await this.page.locator('#Password').fill(password);
+      await this.page.locator('#ConfirmPassword').fill(password);
+      return;
+    }
+
     await this.page.getByRole('textbox', { name: /First Name/i }).fill(firstName);
     await this.page.getByRole('textbox', { name: /Last Name/i }).fill(lastName);
 
@@ -84,6 +104,19 @@ class SignupPage extends BasePage {
     await this.page.getByRole('textbox', { name: 'Confirm password *' }).fill(password);
   }
 
+  async #createAccountButton() {
+    if (this.isMobile()) {
+      // Desktop Create Account is `d-none d-md-block`; mobile Submit can have 0x0 until scrolled.
+      return this.page
+        .locator('button.btn.btn-primary.fullWidth[type="submit"]')
+        .filter({ hasText: /^Submit$/i })
+        .or(this.page.getByRole('button', { name: /^Submit$/i }))
+        .or(this.page.getByRole('button', { name: /^Create Account$/i }))
+        .first();
+    }
+    return this.page.getByRole('button', { name: /^Create Account$/i }).first();
+  }
+
   async submitCreateAccount() {
     // Dismiss chat overlay that can intercept the Create Account click.
     const chatClose = this.page
@@ -93,9 +126,10 @@ class SignupPage extends BasePage {
       await chatClose.click().catch(() => {});
     }
 
-    const createBtn = this.page.getByRole('button', { name: /^Create Account$/i }).first();
-    await createBtn.scrollIntoViewIfNeeded();
+    const createBtn = await this.#createAccountButton();
+    await createBtn.scrollIntoViewIfNeeded().catch(() => {});
     await this.settle(300);
+    await expect(createBtn).toBeAttached({ timeout: 30_000 });
 
     const registerResponse = this.page
       .waitForResponse(
@@ -106,7 +140,12 @@ class SignupPage extends BasePage {
       )
       .catch(() => null);
 
-    await createBtn.click({ force: true });
+    // Mobile Submit can stay non-visible (0x0 / offscreen) — native DOM click still posts.
+    if (this.isMobile()) {
+      await createBtn.evaluate((el) => el.click());
+    } else {
+      await createBtn.click({ force: true });
+    }
     const response = await registerResponse;
 
     if (response) {
@@ -150,9 +189,10 @@ class SignupPage extends BasePage {
       await chatClose.click().catch(() => {});
     }
 
-    const createBtn = this.page.getByRole('button', { name: /^Create Account$/i }).first();
-    await createBtn.scrollIntoViewIfNeeded();
+    const createBtn = await this.#createAccountButton();
+    await createBtn.scrollIntoViewIfNeeded().catch(() => {});
     await this.settle(300);
+    await expect(createBtn).toBeAttached({ timeout: 30_000 });
 
     const registerResponse = this.page
       .waitForResponse(
@@ -163,7 +203,12 @@ class SignupPage extends BasePage {
       )
       .catch(() => null);
 
-    await createBtn.click({ force: true });
+    // Mobile Submit can stay non-visible (0x0 / offscreen) — native DOM click still posts.
+    if (this.isMobile()) {
+      await createBtn.evaluate((el) => el.click());
+    } else {
+      await createBtn.click({ force: true });
+    }
     const response = await registerResponse;
 
     if (response) {

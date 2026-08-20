@@ -35,10 +35,12 @@ When('I click Confirm and Proceed', async function () {
   const pageObj = checkout(this);
   await pageObj.clickConfirmAndProceed();
   this.page = pageObj.page;
+  this.paymentDnsHandoff = Boolean(pageObj.paymentDnsHandoff);
 });
 
 When('I click Payment', async function () {
   const pageObj = checkout(this);
   await pageObj.clickPaymentAndKeepSession();
   this.page = pageObj.page;
+  this.paymentDnsHandoff = Boolean(pageObj.paymentDnsHandoff);
 });

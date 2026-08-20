@@ -388,7 +388,7 @@ class YopmailPage {
    * Wait for the Smart Traveller verification mail, open activation link, assert success.
    * @param {import('@playwright/test').BrowserContext} context
    */
-  async openActivationLinkAndConfirm(context, { timeoutMs = 120_000 } = {}) {
+  async openActivationLinkAndConfirm(context, { timeoutMs = 180_000 } = {}) {
     const deadline = Date.now() + timeoutMs;
     let lastError;
 

@@ -39,11 +39,41 @@ class LoginPage extends BasePage {
   }
 
   async openLoginModal() {
+    if (this.isMobile()) {
+      await this.openLoginModalMobile();
+      return;
+    }
     const loginLink = this.page.locator(LoginPage.OPEN_LOGIN).nth(1);
     await expect(loginLink).toBeVisible({ timeout: 30_000 });
     await loginLink.click();
 
     await expect(this.page.locator(LoginPage.MODAL_CONTENT)).toBeVisible({ timeout: 15_000 });
+    await expect(this.page.locator(LoginPage.EMAIL)).toBeVisible({ timeout: 15_000 });
+    await expect(this.page.locator(LoginPage.PASSWORD)).toBeVisible({ timeout: 15_000 });
+  }
+
+  async openLoginModalMobile() {
+    const modal = this.page.locator(LoginPage.MODAL_CONTENT);
+    if (await modal.isVisible({ timeout: 1_500 }).catch(() => false)) {
+      return;
+    }
+    // Header user icon: a.mobile-user-login-link[data-bs-target="#userLogin"]
+    const mobileLogin = this.page
+      .locator('a.mobile-user-login-link[data-bs-target="#userLogin"]')
+      .or(this.page.locator('a[data-bs-target="#userLogin"]').filter({ visible: true }))
+      .first();
+    if (await mobileLogin.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await mobileLogin.click();
+    } else {
+      await this.openMobileNavIfNeeded();
+      const navLogin = this.page
+        .locator('a[data-bs-target="#userLogin"]')
+        .or(this.page.getByRole('link', { name: /Log\s*In|Sign\s*In/i }))
+        .first();
+      await expect(navLogin).toBeVisible({ timeout: 15_000 });
+      await navLogin.click();
+    }
+    await expect(modal).toBeVisible({ timeout: 15_000 });
     await expect(this.page.locator(LoginPage.EMAIL)).toBeVisible({ timeout: 15_000 });
     await expect(this.page.locator(LoginPage.PASSWORD)).toBeVisible({ timeout: 15_000 });
   }

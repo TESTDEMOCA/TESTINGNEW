@@ -65,6 +65,9 @@ class HomePage extends BasePage {
 
   async navigateToMenu(menuLabel) {
     await this.expectLoaded();
+    if (this.isMobile()) {
+      await this.openMobileNavIfNeeded();
+    }
     const item = this.page.getByRole('link', { name: menuLabel }).or(
       this.page.getByRole('button', { name: menuLabel }),
     );
@@ -75,10 +78,14 @@ class HomePage extends BasePage {
 
   /**
    * Open Language & currency modal, select a currency code, Apply.
-   * codegen: getByRole('link').filter({ hasText: 'Language' })
-   *          #languageCurrency getByText('<CODE>') → Apply
+   * Desktop: Language link → #languageCurrency
+   * Mobile: hamburger → #MobileCurrency (desktop Language lives under .tablet-hide)
    */
   async openLanguageCurrencyModal() {
+    if (this.isMobile()) {
+      return this.openMobileCurrencyModal();
+    }
+
     const modal = this.page.locator('#languageCurrency');
     if (await modal.isVisible({ timeout: 1_500 }).catch(() => false)) {
       return modal;
@@ -90,10 +97,28 @@ class HomePage extends BasePage {
     return modal;
   }
 
+  async openMobileCurrencyModal() {
+    const modal = this.page.locator('#MobileCurrency');
+    if (await modal.isVisible({ timeout: 1_500 }).catch(() => false)) {
+      return modal;
+    }
+    await this.openMobileNavIfNeeded();
+    const currencyTrigger = this.page.locator('a[data-bs-target="#MobileCurrency"]').first();
+    await expect(currencyTrigger).toBeVisible({ timeout: 15_000 });
+    await currencyTrigger.click();
+    await expect(modal).toBeVisible({ timeout: 15_000 });
+    return modal;
+  }
+
   async selectCurrency(currencyCode) {
     const code = String(currencyCode || '').trim().toUpperCase();
     if (!code) {
       throw new Error('Currency code is required (e.g. HKD, INR, USD).');
+    }
+
+    if (this.isMobile()) {
+      await this.selectCurrencyMobile(code);
+      return;
     }
 
     const modal = await this.openLanguageCurrencyModal();
@@ -105,6 +130,23 @@ class HomePage extends BasePage {
     await expect(apply).toBeVisible({ timeout: 10_000 });
     await apply.click();
     await expect(modal).toBeHidden({ timeout: 15_000 }).catch(() => {});
+  }
+
+  async selectCurrencyMobile(code) {
+    const modal = await this.openMobileCurrencyModal();
+    const option = modal.getByText(code, { exact: true });
+    await expect(option).toBeVisible({ timeout: 15_000 });
+    await option.click();
+
+    const apply = modal
+      .locator('a.mobile-currency-submit')
+      .or(modal.getByRole('link', { name: /^Apply$/i }))
+      .or(modal.getByRole('button', { name: /^Apply$/i }))
+      .first();
+    await expect(apply).toBeVisible({ timeout: 10_000 });
+    await apply.click();
+    await expect(modal).toBeHidden({ timeout: 15_000 }).catch(() => {});
+    console.log(`[home] Mobile currency selected: ${code}`);
   }
 }
 

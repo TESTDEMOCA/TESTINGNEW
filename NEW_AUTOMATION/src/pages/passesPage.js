@@ -15,6 +15,14 @@ class PassesPage extends BasePage {
   }
 
   async navigateToPasses() {
+    if (this.isMobile()) {
+      await this.navigateToPassesMobile();
+      return;
+    }
+    await this.navigateToPassesDesktop();
+  }
+
+  async navigateToPassesDesktop() {
     await expect(
       this.page.getByRole('link', { name: /^Passes$/i }).or(
         this.page.getByRole('button', { name: /^Passes$/i }),
@@ -26,6 +34,19 @@ class PassesPage extends BasePage {
       .first()
       .click();
     await this.page.waitForLoadState('domcontentloaded');
+  }
+
+  async navigateToPassesMobile() {
+    // Mobile top nav hides Passes until hamburger (#wsnavtoggle) opens.
+    await this.openMobileNavIfNeeded();
+    const passesLink = this.page
+      .getByRole('link', { name: /^Passes$/i })
+      .or(this.page.locator('a[href*="airport-lounge-passes"]'))
+      .first();
+    await expect(passesLink).toBeVisible({ timeout: 30_000 });
+    await passesLink.click();
+    await this.page.waitForLoadState('domcontentloaded');
+    await expect(this.page).toHaveURL(/airport-lounge-passes/i, { timeout: 60_000 });
   }
 
   // Returns the first visible pass card's add-to-cart button
@@ -320,6 +341,16 @@ class PassesPage extends BasePage {
   }
 
   async #dismissBlockingNotice() {
+    // Passes error modal (#passPageErrorModal) blocks mini-cart Check Out on mobile.
+    const passErrClose = this.page
+      .locator('#passPageErrorModal.show button, #passPageErrorModal.show [data-bs-dismiss="modal"]')
+      .or(this.page.locator('#passPageErrorModal button').filter({ hasText: /^OK$/i }))
+      .first();
+    if (await passErrClose.isVisible({ timeout: 1_500 }).catch(() => false)) {
+      await passErrClose.click({ force: true }).catch(() => {});
+      await this.page.waitForTimeout(400);
+    }
+
     const ok = this.page.locator('button').filter({ hasText: /^OK$/i }).first();
     if (await ok.isVisible({ timeout: 1_500 }).catch(() => false)) {
       await ok.click().catch(() => {});
@@ -333,10 +364,14 @@ class PassesPage extends BasePage {
     }
 
     await this.page.evaluate(() => {
-      document.querySelectorAll('.modal.show, .modal-backdrop, .swal2-container, [role="dialog"]').forEach((el) => {
-        if ('remove' in el) el.remove();
-        else el.style.display = 'none';
-      });
+      document
+        .querySelectorAll(
+          '#passPageErrorModal.show, #passPageErrorModal.modal, .modal.show, .modal-backdrop, .swal2-container, [role="dialog"].modal',
+        )
+        .forEach((el) => {
+          if ('remove' in el) el.remove();
+          else el.style.display = 'none';
+        });
       document.body.classList.remove('modal-open');
       document.body.style.removeProperty('overflow');
       document.body.style.removeProperty('padding-right');

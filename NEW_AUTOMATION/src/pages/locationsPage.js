@@ -126,9 +126,10 @@ class LocationsPage extends BasePage {
         await loungeTab.click().catch(() => {});
       }
 
-      const bookCta = this.page.getByRole('link', { name: /Book Your Visit/i }).first();
-      await expect(bookCta).toBeVisible({ timeout: 30_000 });
-      await bookCta.click();
+      // <a class="btn btn-primary bookingBtn mobile" data-bs-target="#mobileVisit">Book Your Visit</a>
+      const { LoungeBookingPage } = require('./loungeBookingPage');
+      const lounge = new LoungeBookingPage(this.page, this.settings);
+      await lounge.openMobileBookYourVisitModal();
     }
 
     await this.expectBookYourVisitHeader(60_000);
@@ -138,8 +139,10 @@ class LocationsPage extends BasePage {
     if (this.isMobile()) {
       await expect(
         this.page
-          .getByRole('button', { name: 'Get Price' })
-          .or(this.page.getByRole('heading', { name: /Book your visit/i }))
+          .locator('#mobileVisit.show, #mobileVisit')
+          .filter({ has: this.page.getByRole('button', { name: /Get Price/i }) })
+          .or(this.page.locator('#mobileVisit .getPrice-btn, #mobileVisit button:has-text("Get Price")'))
+          .or(this.page.getByRole('button', { name: /Get Price/i }))
           .first(),
       ).toBeVisible({ timeout });
       return;
