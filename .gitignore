@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Reports
+reports/**
+!reports/**/.gitkeep
+playwright-report/
+test-results/
+allure-results/
+allure-report/
+
+# Logs
+*.log
+
+# Generated test data
+fixtures/codegen/*
+!fixtures/codegen/.gitkeep
+
+# OS files
+.DS_Store
+Thumbs.db
