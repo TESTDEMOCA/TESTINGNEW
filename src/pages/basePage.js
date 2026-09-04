@@ -1,5 +1,6 @@
 const { expect } = require('@playwright/test');
 const { ActionEngine } = require('../utils/actionEngine');
+const { clickSalesManagoClose } = require('../support/salesManago');
 
 class BasePage {
   static AFTER_SELECT_SETTLE_MS = 300;
@@ -17,6 +18,9 @@ class BasePage {
   /** Mobile hamburger used across locations / home / passes. */
   static MOBILE_NAV_TOGGLE = '#wsnavtoggle';
 
+  static MOBILE_CONFIRM_PROCEED =
+    'a.btn.btn-primary.bookingBtn.mobile.mobile-reserve-now-btn, a.mobile-reserve-now-btn';
+
   constructor(page, settings) {
     this.page = page;
     this.settings = settings;
@@ -25,6 +29,41 @@ class BasePage {
 
   isMobile() {
     return Boolean(this.settings?.device?.isMobile || this.settings?.deviceName === 'mobile');
+  }
+
+  mobileConfirmAndProceed() {
+    return this.page
+      .locator(BasePage.MOBILE_CONFIRM_PROCEED)
+      .filter({ hasText: /Confirm\s*&\s*Proceed/i })
+      .or(this.page.locator('a.btn.btn-primary.bookingBtn.mobile.mobile-reserve-now-btn'))
+      .or(this.page.locator('a.mobile-reserve-now-btn'))
+      .or(this.page.locator('a.btn, button.btn, a, button').filter({ hasText: /Confirm\s*&\s*Proceed/i }))
+      .first();
+  }
+
+  async clickMobileConfirmAndProceed(timeout = 30_000) {
+    const el = this.mobileConfirmAndProceed();
+    await expect(el).toBeAttached({ timeout });
+    await this.dismissBlockingOverlays();
+    const clicked = await this.page.evaluate(() => {
+      const match = (node) =>
+        /confirm\s*&\s*proceed/i.test((node.textContent || '').replace(/\s+/g, ' '));
+      const node =
+        document.querySelector('a.btn.btn-primary.bookingBtn.mobile.mobile-reserve-now-btn') ||
+        document.querySelector('a.mobile-reserve-now-btn') ||
+        [...document.querySelectorAll('a.btn, button.btn, a, button')].find(match);
+      if (!node) return false;
+      node.classList.remove('hide', 'd-none');
+      node.removeAttribute('hidden');
+      node.style.setProperty('display', '', 'important');
+      node.style.setProperty('visibility', 'visible', 'important');
+      node.scrollIntoView({ block: 'center', inline: 'nearest' });
+      node.click();
+      return true;
+    });
+    if (!clicked) {
+      await el.evaluate((node) => node.click());
+    }
   }
 
   /** Open the mobile slide-out nav when needed (body gets class wsactive). */
@@ -138,19 +177,92 @@ class BasePage {
     await this.page.goto(url, { waitUntil: 'domcontentloaded' });
   }
 
+  async dismissBlockingOverlays() {
+    await clickSalesManagoClose(this.page);
+    await this.page.keyboard.press('Escape').catch(() => {});
+    const closeIframe = this.page.locator('iframe[title="Close message"]').first();
+    if (await closeIframe.isVisible({ timeout: 400 }).catch(() => false)) {
+      await closeIframe.click({ force: true, timeout: 1_000 }).catch(() => {});
+    }
+    await clickSalesManagoClose(this.page);
+    await this.page
+      .evaluate(() => {
+        const hide = (el) => {
+          if (!el) return;
+          el.style.setProperty('display', 'none', 'important');
+          el.style.setProperty('visibility', 'hidden', 'important');
+          el.style.setProperty('pointer-events', 'none', 'important');
+        };
+        document
+          .querySelectorAll(
+            [
+              '#ulLocation',
+              '#ulLocationMobile',
+              '.ui-autocomplete',
+              'ul.ui-menu.ui-widget',
+              '#st_notification_banner',
+              '#st_notification_modal',
+              '[id^="st_notification"]',
+              'iframe.st_preview_frame_modal',
+              '#smt-overlay',
+              '#webmessagemodalbody',
+              '#outercontainer',
+              '[smtmsgid]',
+              'iframe[title="Close message"]',
+              'iframe[title*="message" i]',
+              'iframe.st_preview_frame_banner',
+              'iframe[id^="preview-notification-frame"]',
+              '.st_preview_frame_banner',
+            ].join(','),
+          )
+          .forEach(hide);
+      })
+      .catch(() => {});
+  }
+
+  async clickAfterDismissingOverlays(locator, timeout = 15_000) {
+    await this.dismissBlockingOverlays();
+    try {
+      await locator.click({ timeout: Math.min(timeout, 8_000) });
+    } catch {
+      await this.dismissBlockingOverlays();
+      await locator.click({ force: true, timeout });
+    }
+  }
+
+  datepickerRoot() {
+    return this.page
+      .locator(
+        '#ui-datepicker-div, #mobileBooking .ui-datepicker, #mobileBooking table.ui-datepicker-calendar',
+      )
+      .filter({ visible: true })
+      .first();
+  }
+
   async isDatepickerOpen() {
     return this.page.evaluate(() => {
-      const el = document.querySelector('#ui-datepicker-div');
-      if (!el) return false;
-      const style = window.getComputedStyle(el);
-      return style.display !== 'none';
+      const nodes = [
+        document.querySelector('#ui-datepicker-div'),
+        document.querySelector('#mobileBooking .ui-datepicker'),
+        document.querySelector('#mobileBooking table.ui-datepicker-calendar'),
+      ].filter(Boolean);
+      return nodes.some((el) => {
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      });
     });
   }
 
   async openDatepicker(inputLocator) {
     await expect(inputLocator).toBeVisible({ timeout: 30_000 });
     await inputLocator.scrollIntoViewIfNeeded();
-    await inputLocator.click();
+    await this.dismissBlockingOverlays();
+    await inputLocator.click({ timeout: 5_000 }).catch(async () => {
+      await this.dismissBlockingOverlays();
+      await inputLocator.click({ force: true });
+    });
     await this.settle(400);
     if (!(await this.isDatepickerOpen())) {
       await inputLocator.evaluate((el) => {
@@ -178,7 +290,6 @@ class BasePage {
    * At month end, advances to day 1 of the next month.
    */
   async selectNextDayInOpenCalendar() {
-    const calendar = this.page.locator('#ui-datepicker-div');
     for (let i = 0; i < 40; i += 1) {
       if (await this.isDatepickerOpen()) break;
       await this.settle(250);
@@ -187,6 +298,7 @@ class BasePage {
       throw new Error('Datepicker is not open');
     }
 
+    const calendar = this.datepickerRoot();
     const result = await calendar.evaluate((root) => {
       const cells = Array.from(
         root.querySelectorAll(
@@ -208,7 +320,7 @@ class BasePage {
     });
 
     if (result === 'need-next-month') {
-      await calendar.locator('.ui-datepicker-next').click();
+      await calendar.locator('.ui-datepicker-next').click({ force: true });
       const firstDay = calendar
         .locator('td:not(.ui-datepicker-other-month):not(.ui-datepicker-unselectable) a')
         .first();
@@ -218,8 +330,8 @@ class BasePage {
 
   /**
    * Parse lounge location copy, e.g. "Near Gate 60, Departures, Terminal 1, ..."
-   * Used by all booking flows before LMS outlet change (G35 / G60).
-   * Returns '35' | '60' | null.
+   * Used by all booking flows before LMS outlet change (G1 / G35 / G60).
+   * Returns '1' | '35' | '60' | null.
    */
   async captureGateNumber(timeout = 8_000) {
     const loc = this.page
@@ -236,7 +348,7 @@ class BasePage {
     const match = text.match(/Gate\s*(\d+)/i);
     if (!match) return null;
     const gate = String(match[1]);
-    if (gate === '35' || gate === '60' || gate === '1') {
+    if (['1', '35', '60'].includes(gate)) {
       console.log(`[gate] Captured Gate ${gate} from: ${text}`);
       return gate;
     }

@@ -9,28 +9,67 @@ class PaymentPage extends BasePage {
     await expect(this.page.getByText('Payment Method')).toBeVisible({ timeout });
     // Booking summary amount proves session (Total Payable label can lag).
     await expect(this.page.getByText(/[A-Z]{3}\s*[\d,.]+/).first()).toBeVisible({ timeout });
-    await expect(
-      this.page
-        .locator(
-          '#dropin-container, .adyen-checkout__dropin--ready, iframe[title="Iframe for card number"]',
-        )
-        .first(),
-    ).toBeVisible({ timeout });
+    await expect(this.visibleAdyenDropIn()).toBeVisible({ timeout });
+  }
+
+  visibleAdyenIframe(title) {
+    return this.page.locator(`iframe[title="${title}"]`).filter({ visible: true }).first();
+  }
+
+  visibleAdyenDropIn() {
+    return this.page.locator('#dropin-container, .adyen-checkout__dropin--ready').filter({ visible: true }).first();
+  }
+
+  visibleSecuredFieldIframe() {
+    return this.page
+      .locator('iframe[title="Iframe for card number"], iframe[title="Iframe for security code"]')
+      .filter({ visible: true })
+      .first();
   }
 
   async waitForAdyenDropIn(timeout = 120_000) {
     await expect(this.page.getByText(/[A-Z]{3}\s*[\d,.]+/).first()).toBeVisible({ timeout });
+    await expect(this.visibleAdyenDropIn()).toBeVisible({ timeout });
 
-    const cards = this.page
-      .getByRole('button', { name: /^Cards$/i })
-      .or(this.page.getByText(/^Cards$/i));
-    if (await cards.first().isVisible({ timeout: 10_000 }).catch(() => false)) {
-      await cards.first().click().catch(() => {});
+    if (await this.visibleSecuredFieldIframe().isVisible({ timeout: 8_000 }).catch(() => false)) {
+      return;
     }
 
-    await expect(this.page.locator('iframe[title="Iframe for card number"]')).toBeVisible({
-      timeout,
-    });
+    const stored = this.page.locator('.adyen-checkout__payment-method--storedCard').first();
+    if (await stored.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await stored.click().catch(() => {});
+      console.log('[payment] Expanded stored card for CVC');
+    } else {
+      const cards = this.page.getByRole('button', { name: /^Cards$/i });
+      if (await cards.first().isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await cards.first().click().catch(() => {});
+      }
+    }
+
+    await expect(this.visibleSecuredFieldIframe()).toBeVisible({ timeout });
+  }
+
+  async fillAdyenIframeTextbox(iframeTitle, textboxName, value) {
+    const input = this.visibleAdyenIframe(iframeTitle)
+      .contentFrame()
+      .getByRole('textbox', { name: textboxName });
+    await expect(input).toBeVisible({ timeout: 30_000 });
+    await input.click();
+    await input.fill(value);
+  }
+
+  async expandNewCardPaymentMethod() {
+    const newCard = this.page
+      .locator('.adyen-checkout__payment-method--card:not(.adyen-checkout__payment-method--storedCard)')
+      .first();
+    if (!(await newCard.isVisible({ timeout: 5_000 }).catch(() => false))) {
+      return;
+    }
+    await newCard.click().catch(() => {});
+    console.log('[payment] Expanded new card form');
+    await this.visibleAdyenIframe('Iframe for card number')
+      .waitFor({ state: 'visible', timeout: 15_000 })
+      .catch(() => {});
   }
 
   async fillCardDetails(card = {}) {
@@ -42,30 +81,35 @@ class PaymentPage extends BasePage {
     const cvc = String(card.cvc || '7373');
     const name = String(card.name || 'TEST');
 
-    const cardNumber = this.page
-      .locator('iframe[title="Iframe for card number"]')
-      .contentFrame()
-      .getByRole('textbox', { name: 'Card number' });
-    await cardNumber.click();
-    await cardNumber.fill(number);
+    if (card.saveForFuture) {
+      await this.expandNewCardPaymentMethod();
+    }
 
-    const expiryInput = this.page
-      .locator('iframe[title="Iframe for expiry date"]')
-      .contentFrame()
-      .getByRole('textbox', { name: 'Expiry date' });
-    await expiryInput.click();
-    await expiryInput.fill(expiry);
+    const hasNewCardForm = await this.visibleAdyenIframe('Iframe for card number')
+      .isVisible({ timeout: 3_000 })
+      .catch(() => false);
 
-    const security = this.page
-      .locator('iframe[title="Iframe for security code"]')
-      .contentFrame()
-      .getByRole('textbox', { name: 'Security code' });
-    await security.click();
-    await security.fill(cvc);
+    if (!hasNewCardForm) {
+      console.log('[payment] Stored card already on file — CVV only');
+      await this.fillAdyenIframeTextbox('Iframe for security code', 'Security code', cvc);
+      return;
+    }
+
+    await this.fillAdyenIframeTextbox('Iframe for card number', 'Card number', number);
+    await this.fillAdyenIframeTextbox('Iframe for expiry date', 'Expiry date', expiry);
+    await this.fillAdyenIframeTextbox('Iframe for security code', 'Security code', cvc);
 
     const nameOnCard = this.page.getByRole('textbox', { name: 'Name on card' });
     if (await nameOnCard.isVisible({ timeout: 5_000 }).catch(() => false)) {
       await nameOnCard.fill(name);
+    } else if (this.isMobile()) {
+      const holderName = this.page
+        .locator(
+          'input[name="holderName"], input.adyen-checkout__card__holderName__input, input[autocomplete="cc-name"][placeholder="J. Smith"]',
+        )
+        .first();
+      await expect(holderName).toBeVisible({ timeout: 15_000 });
+      await holderName.fill(name);
     }
 
     if (card.saveForFuture) {
@@ -117,13 +161,7 @@ class PaymentPage extends BasePage {
   async fillSavedCardSecurityCodeOnly(cvc = '7373') {
     await this.expectPaymentMethodVisible();
     await this.waitForAdyenDropIn();
-    const security = this.page
-      .locator('iframe[title="Iframe for security code"]')
-      .contentFrame()
-      .getByRole('textbox', { name: 'Security code' });
-    await expect(security).toBeVisible({ timeout: 60_000 });
-    await security.click();
-    await security.fill(String(cvc));
+    await this.fillAdyenIframeTextbox('Iframe for security code', 'Security code', String(cvc));
     console.log('[payment] Filled CVV only for saved card');
   }
 

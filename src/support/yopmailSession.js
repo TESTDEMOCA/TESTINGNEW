@@ -30,8 +30,10 @@ async function openYopmailSession(world) {
     args: ['--disable-application-cache', '--disk-cache-size=1', '--media-cache-size=1'],
   });
 
+  // Always desktop so Yopmail stays on ifinbox/ifmail (mobile viewport opens ifmobmail and breaks refresh).
+  const yopViewport = { width: 1280, height: 720 };
   const contextOptions = {
-    viewport: settings.device?.viewport || { width: 1280, height: 720 },
+    viewport: yopViewport,
     ignoreHTTPSErrors: true,
     serviceWorkers: 'block',
   };
@@ -43,7 +45,7 @@ async function openYopmailSession(world) {
     world._yopmailVideoDir = videoDir;
     contextOptions.recordVideo = {
       dir: videoDir,
-      size: settings.device?.viewport || { width: 1280, height: 720 },
+      size: yopViewport,
     };
   }
 

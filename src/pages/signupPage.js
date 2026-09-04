@@ -1,10 +1,6 @@
 const { expect } = require('@playwright/test');
 const { BasePage } = require('./basePage');
 
-/**
- * New-member registration form (Log In → Sign up now).
- * Locators from fixtures/codegen/tc08-desktop.js.
- */
 class SignupPage extends BasePage {
   static SIGN_UP_NOW = 'a:has-text("Sign up now"), a[href*="register"], a[href*="sign-up"]';
   static TITLE = 'select[name*="Title"], #Title, select:near(:text("Title"))';
@@ -33,8 +29,21 @@ class SignupPage extends BasePage {
   async startSignUpFromLoginModal_afterSelectingProduct() {
     const link = this.page.getByRole('link', { name: /Sign up now/i }).first();
     await expect(link).toBeVisible({ timeout: 30_000 });
-    await link.click();
+    if (this.isMobile()) {
+      await this.clickAfterDismissingOverlays(link, 15_000);
+    } else {
+      await link.click();
+    }
     await this.page.waitForLoadState('domcontentloaded', { timeout: 60_000 }).catch(() => {});
+    if (this.isMobile()) {
+      await expect(
+        this.page
+          .getByRole('textbox', { name: /Password/i })
+          .or(this.page.locator('#Password, #ConfirmPassword'))
+          .first(),
+      ).toBeVisible({ timeout: 60_000 });
+      return;
+    }
     await expect(this.page.getByRole('textbox', { name: /First Name/i }).first()).toBeVisible({
       timeout: 60_000,
     });
@@ -49,7 +58,6 @@ class SignupPage extends BasePage {
     email,
     password,
   }) {
-    // codegen: getByLabel('Title').selectOption('Mr.')
     const titleSelect = this.page.getByLabel('Title', { exact: false }).first();
     if (await titleSelect.isVisible({ timeout: 5_000 }).catch(() => false)) {
       await titleSelect.selectOption({ label: title }).catch(async () => {
@@ -58,34 +66,61 @@ class SignupPage extends BasePage {
     }
 
     if (this.isMobile()) {
-      // Mobile sign-up form uses distinct ids (desktop roles still exist but Create is hidden).
-      await this.page.locator('#SignUpFirstName, #FirstName').first().fill(firstName);
-      await this.page.locator('#LastName').first().fill(lastName);
-      const countrySelect = this.page.locator('#CountryOfResidence').first();
+      await this.dismissBlockingOverlays();
+      const firstNameBox = this.page
+        .getByRole('textbox', { name: /First Name/i })
+        .or(this.page.locator('#SignUpFirstName, #FirstName'))
+        .first();
+      const lastNameBox = this.page
+        .getByRole('textbox', { name: /Last Name/i })
+        .or(this.page.locator('#LastName'))
+        .first();
+      await firstNameBox.fill(firstName);
+      await lastNameBox.fill(lastName);
+      const countrySelect = this.page
+        .getByLabel(/Country of Residence/i)
+        .or(this.page.locator('#CountryOfResidence'))
+        .first();
       await expect(countrySelect).toBeVisible({ timeout: 15_000 });
       await countrySelect.selectOption(country);
       await this.page.locator(SignupPage.PHONE).fill(phone);
-      await this.page.locator('#EmailAddress').first().fill(email);
-      await this.page.locator('#ConfirmEmailAddress').first().fill(email);
-      const marketing = this.page.locator('#SubscribeNewsletter, #ReceiveOffers').first();
+      const emailBox = this.page
+        .getByRole('textbox', { name: /^Email Address/i })
+        .or(this.page.locator('#Email, #SignUpEmail'))
+        .first();
+      const confirmEmailBox = this.page
+        .getByRole('textbox', { name: /Confirm Email Address/i })
+        .or(this.page.locator('#ConfirmEmail, #SignUpConfirmEmail'))
+        .first();
+      await emailBox.fill(email);
+      await confirmEmailBox.fill(email);
+      const marketing = this.page.getByRole('checkbox', { name: /I would like to receive/i })
+        .or(this.page.locator('#SubscribeNewsletter, #ReceiveOffers'))
+        .first();
       if (await marketing.isVisible({ timeout: 2_000 }).catch(() => false)) {
         await marketing.check().catch(() => {});
       }
       await this.page.locator(SignupPage.AGREE_TNC).check();
-      await this.page.locator('#Password').fill(password);
-      await this.page.locator('#ConfirmPassword').fill(password);
+      const passwordBox = this.page
+        .getByRole('textbox', { name: 'Password *', exact: true })
+        .or(this.page.locator('#Password'))
+        .first();
+      const confirmPasswordBox = this.page
+        .getByRole('textbox', { name: 'Confirm password *' })
+        .or(this.page.locator('#ConfirmPassword'))
+        .first();
+      await passwordBox.fill(password);
+      await confirmPasswordBox.fill(password);
       return;
     }
 
     await this.page.getByRole('textbox', { name: /First Name/i }).fill(firstName);
     await this.page.getByRole('textbox', { name: /Last Name/i }).fill(lastName);
 
-    // codegen: getByLabel('Country of Residence').selectOption('102')
     const countrySelect = this.page.getByLabel(/Country of Residence/i).first();
     await expect(countrySelect).toBeVisible({ timeout: 15_000 });
     await countrySelect.selectOption(country);
 
-    // codegen: locator('#phone')
     await this.page.locator(SignupPage.PHONE).fill(phone);
 
     await this.page.getByRole('textbox', { name: /^Email Address/i }).fill(email);
@@ -96,29 +131,25 @@ class SignupPage extends BasePage {
       await marketing.check().catch(() => {});
     }
 
-    // codegen: locator('#AgreeTNC').check()
     await this.page.locator(SignupPage.AGREE_TNC).check();
 
-    // codegen: getByRole('textbox', { name: 'Password *', exact: true })
     await this.page.getByRole('textbox', { name: 'Password *', exact: true }).fill(password);
     await this.page.getByRole('textbox', { name: 'Confirm password *' }).fill(password);
   }
 
   async #createAccountButton() {
     if (this.isMobile()) {
-      // Desktop Create Account is `d-none d-md-block`; mobile Submit can have 0x0 until scrolled.
+      const create = this.page.getByRole('button', { name: /^Create Account$/i }).first();
+      if (await create.count()) return create;
       return this.page
-        .locator('button.btn.btn-primary.fullWidth[type="submit"]')
-        .filter({ hasText: /^Submit$/i })
-        .or(this.page.getByRole('button', { name: /^Submit$/i }))
-        .or(this.page.getByRole('button', { name: /^Create Account$/i }))
+        .locator('form[action*="register"] button[type="submit"], button:has-text("Create Account")')
+        .or(this.page.locator('button.btn.btn-primary.fullWidth[type="submit"]').filter({ hasText: /^Submit$/i }))
         .first();
     }
     return this.page.getByRole('button', { name: /^Create Account$/i }).first();
   }
 
   async submitCreateAccount() {
-    // Dismiss chat overlay that can intercept the Create Account click.
     const chatClose = this.page
       .locator('[aria-label*="Close" i], .chat-close, button:has-text("Close")')
       .first();
@@ -140,8 +171,8 @@ class SignupPage extends BasePage {
       )
       .catch(() => null);
 
-    // Mobile Submit can stay non-visible (0x0 / offscreen) — native DOM click still posts.
     if (this.isMobile()) {
+      await this.dismissBlockingOverlays();
       await createBtn.evaluate((el) => el.click());
     } else {
       await createBtn.click({ force: true });
@@ -181,7 +212,6 @@ class SignupPage extends BasePage {
   }
 
   async submitCreateAccount_afterproductSelection() {
-    // Dismiss chat overlay that can intercept the Create Account click.
     const chatClose = this.page
       .locator('[aria-label*="Close" i], .chat-close, button:has-text("Close")')
       .first();
@@ -203,8 +233,8 @@ class SignupPage extends BasePage {
       )
       .catch(() => null);
 
-    // Mobile Submit can stay non-visible (0x0 / offscreen) — native DOM click still posts.
     if (this.isMobile()) {
+      await this.dismissBlockingOverlays();
       await createBtn.evaluate((el) => el.click());
     } else {
       await createBtn.click({ force: true });
@@ -220,6 +250,19 @@ class SignupPage extends BasePage {
           `Create Account failed (${status}${code ? ` / ${code}` : ''}): ${
             body?.message || body?.Message || JSON.stringify(body) || response.statusText()
           }`,
+        );
+      }
+    }
+
+    if (this.isMobile()) {
+      if (!response) {
+        const fieldError = await this.page
+          .locator('.field-validation-error, .validation-summary-errors, .text-danger, .error, .alert-danger')
+          .allTextContents()
+          .catch(() => []);
+        const visibleError = fieldError.map((t) => t.trim()).filter(Boolean).join(' | ');
+        throw new Error(
+          `Mobile Create Account did not POST a register/signup request.${visibleError ? ` Form errors: ${visibleError}` : ''} URL: ${this.page.url()}`,
         );
       }
     }

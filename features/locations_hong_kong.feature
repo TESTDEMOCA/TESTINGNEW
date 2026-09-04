@@ -31,7 +31,15 @@ Feature: Locations Hong Kong booking
     And I click Confirm and Pay
     Then I should see the Booking Confirmed page
     And the booking order number should be captured
-    And I should see the captured booking in LMS Bookings
+    And I fetch the AMS order summary for the captured booking id
+    And I log in to LMS
+    And I open LMS Masters
+    And I click Outlet under LMS Masters
+    And I search LMS Outlet with the captured AMS order number
+    And I capture the LMS outlet name from the Outlet search result
+    And I open LMS Bookings
+    And I select the captured LMS outlet
+    Then I should see the captured booking in LMS Bookings
 
   @smoke @locations @QA-HKG @QA-HKG-GUEST @guest
   Scenario: Guest flow - Hong Kong HKG booking with guest checkout
@@ -55,4 +63,12 @@ Feature: Locations Hong Kong booking
     And I click Confirm and Pay
     Then I should see the Booking Confirmed page
     And the booking order number should be captured
-    And I should see the captured booking in LMS Bookings
+    And I fetch the AMS order summary for the captured booking id
+    And I log in to LMS
+    And I open LMS Masters
+    And I click Outlet under LMS Masters
+    And I search LMS Outlet with the captured AMS order number
+    And I capture the LMS outlet name from the Outlet search result
+    And I open LMS Bookings
+    And I select the captured LMS outlet
+    Then I should see the captured booking in LMS Bookings

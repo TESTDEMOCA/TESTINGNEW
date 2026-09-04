@@ -18,4 +18,12 @@ Feature: TC05 Book Now More at HKG shower addon guest checkout
     And I click Confirm and Proceed for Book Now member flow
     Then I should reach payment and confirm booking for Book Now flow
     And the booking order number should be captured
-    And I should see the captured booking in LMS Bookings
+    And I fetch the AMS order summary for the captured booking id
+    And I log in to LMS
+    And I open LMS Masters
+    And I click Outlet under LMS Masters
+    And I search LMS Outlet with the captured AMS order number
+    And I capture the LMS outlet name from the Outlet search result
+    And I open LMS Bookings
+    And I select the captured LMS outlet
+    Then I should see the captured booking in LMS Bookings

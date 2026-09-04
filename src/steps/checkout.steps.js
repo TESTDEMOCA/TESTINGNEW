@@ -15,6 +15,7 @@ Then('the member checkout form should be visible', async function () {
 
 When('I fill the guest checkout form with defaults', async function () {
   const data = this.testData?.guest || {};
+  this.guestFirstName = data.firstName || 'test';
   await checkout(this).fillGuestCheckoutForm(data);
 });
 

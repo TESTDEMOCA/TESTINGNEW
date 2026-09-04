@@ -12,7 +12,15 @@ class AppWorld {
     this.device = null;
     this.browserName = null;
     this.orderNo = null;
-    /** LMS outlet gate: '35' | '60' | null */
+    /** Full AMS orderId from summary API, e.g. HKBC-10218-62HVQP */
+    this.amsOrderId = null;
+    /** Numeric segment only from AMS orderId, e.g. 10218 */
+    this.amsOrderNumber = null;
+    /** LMS outlet title from Outlet master, e.g. HKG - PPL - East Hall (MAS) */
+    this.lmsOutletName = null;
+    /** Guest first name used at checkout (AMS summary query). */
+    this.guestFirstName = null;
+    /** LMS outlet gate: '1' | '35' | '60' | null */
     this.lmsGate = null;
     /** Site currency chosen via Language modal (e.g. INR); overrides destination default. */
     this.selectedCurrency = null;

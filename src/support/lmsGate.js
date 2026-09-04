@@ -1,23 +1,25 @@
+const LMS_HKG_GATES = ['1', '35', '60'];
+
 /**
  * Shared LMS gate helpers used by all booking features (TC01–TC04, Locations).
- * Captured gate drives LMS outlet change: HKG - PPL - G35 / G60.
+ * Captured gate drives LMS outlet change: HKG - PPL - G1 / G35 / G60.
  */
 
 /**
  * @param {object} world
- * @param {'35'|'60'|string|null|undefined} gate
+ * @param {'1'|'35'|'60'|string|null|undefined} gate
  * @param {string} source
  */
 function setLmsGate(world, gate, source = 'unknown') {
   const gateNum = String(gate || '').replace(/\D/g, '');
-  if (gateNum !== '35' && gateNum !== '60') return false;
+  if (!LMS_HKG_GATES.includes(gateNum)) return false;
   world.lmsGate = gateNum;
   console.log(`[gate] Set LMS gate ${gateNum} from ${source}`);
   return true;
 }
 
 /**
- * Capture "Near Gate 35/60" from the current page and store on world.lmsGate.
+ * Capture "Near Gate 1/35/60" from the current page and store on world.lmsGate.
  * A successful capture overwrites a previous value (lounge detail beats search widget).
  * @param {object} world
  * @param {{ captureGateNumber: (timeout?: number) => Promise<string|null> }} pageObj
@@ -32,7 +34,7 @@ async function captureAndSetLmsGate(world, pageObj, source, timeout = 8_000) {
   if (setLmsGate(world, gate, source)) {
     return world.lmsGate;
   }
-  if (world.lmsGate === '35' || world.lmsGate === '60' || world.lmsGate === '1') {
+  if (LMS_HKG_GATES.includes(String(world.lmsGate || ''))) {
     console.log(`[gate] Keep existing LMS gate ${world.lmsGate} (no new capture at ${source})`);
     return world.lmsGate;
   }
@@ -40,4 +42,4 @@ async function captureAndSetLmsGate(world, pageObj, source, timeout = 8_000) {
   return null;
 }
 
-module.exports = { setLmsGate, captureAndSetLmsGate };
+module.exports = { LMS_HKG_GATES, setLmsGate, captureAndSetLmsGate };

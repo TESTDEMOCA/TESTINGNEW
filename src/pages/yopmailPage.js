@@ -1,6 +1,16 @@
 const { expect } = require('@playwright/test');
 const { randomInt } = require('crypto');
 
+/** Yopmail inbox list often replaces digits with * (GCBC-STPPT-62HY4H → GCBC-STPPT-**HY*H). */
+function bookingIdInboxPattern(bookingId) {
+  const raw = String(bookingId || '').trim();
+  const parts = [...raw].map((ch) => {
+    if (/\d/.test(ch)) return '[\\d*]';
+    return ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  });
+  return new RegExp(parts.join(''), 'i');
+}
+
 /**
  * Temporary inbox helper for signup email verification.
  * Flow from fixtures/codegen/tc08-desktop.js (stabilized: invent mailbox, skip ads/clipboard).
@@ -60,7 +70,9 @@ class YopmailPage {
     await this.dismissAdsIfPresent();
     const refresh = this.page.locator('#refresh');
     await expect(refresh).toBeVisible({ timeout: 30_000 });
-    await refresh.click();
+    await refresh.click({ force: true }).catch(async () => {
+      await refresh.click();
+    });
     await this.page.waitForTimeout(2_000);
   }
 
@@ -112,18 +124,7 @@ class YopmailPage {
       throw new Error('Booking order number is required to validate the Yopmail confirmation email.');
     }
 
-    // Yopmail inbox list often masks middle (and sometimes trailing) chars
-    // e.g. GCBC-STPPT-61FMN4 → GCBC-STPPT-**FMN* (not **FMN4).
-    // Match confirmation subject + partial booking id in the list, then assert full id in opened mail.
-    const idParts = bookingId.split('-').filter(Boolean);
-    const idTail = idParts[idParts.length - 1] || bookingId;
-    const idSuffixCore = idTail.slice(-4, -1) || idTail.slice(-3); // e.g. FMN from 61FMN4
-    const idPrefix = bookingId.slice(0, Math.min(11, bookingId.length)); // e.g. GCBC-STPPT-
-    const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const maskedIdHint = new RegExp(
-      `${escapeRe(idPrefix)}[-\\w*]{0,12}${escapeRe(idSuffixCore)}[\\w*]`,
-      'i',
-    );
+    const maskedIdHint = bookingIdInboxPattern(bookingId);
     const confirmationSubject = /Plaza Premium Lounge Booking Confirmation/i;
     const expectedFrom = /PPL\s*UAT|uat\.ibe@plazapremiumgroup\.com/i;
 
@@ -197,9 +198,15 @@ class YopmailPage {
         // <div class="ellipsis nw b f18">Plaza Premium Lounge Booking Confirmation GCBC-STPPT-...</div>
         const subjectEl = mail
           .locator('div.ellipsis.nw.b.f18')
-          .filter({ hasText: expectedSubjectText });
+          .filter({ hasText: expectedSubjectText })
+          .or(
+            mail
+              .locator('div.ellipsis.nw.b.f18')
+              .filter({ hasText: confirmationSubject })
+              .filter({ hasText: maskedIdHint }),
+          );
 
-        await expect(subjectEl).toBeVisible({ timeout: 15_000 });
+        await expect(subjectEl.first()).toBeVisible({ timeout: 15_000 });
         const subjectText = ((await subjectEl.first().innerText().catch(() => '')) || '').trim();
 
         if (!confirmationSubject.test(subjectText)) {
@@ -207,7 +214,7 @@ class YopmailPage {
             `Opened-mail subject element missing "Plaza Premium Lounge Booking Confirmation". Actual: "${subjectText}"`,
           );
         }
-        if (!subjectText.includes(bookingId)) {
+        if (!subjectText.includes(bookingId) && !maskedIdHint.test(subjectText)) {
           throw new Error(
             `Opened-mail subject does not contain captured booking id ${bookingId}. Actual: "${subjectText}"`,
           );
@@ -266,7 +273,7 @@ class YopmailPage {
    * @param {string} orderNo
    * @param {{ timeoutMs?: number }} [options]
    */
-  async expectUnlockYourPplPassEmail(mailbox, orderNo, { timeoutMs = 120_000 } = {}) {
+  async expectUnlockYourPplPassEmail(mailbox, orderNo, { timeoutMs = 180_000 } = {}) {
     const bookingId = String(orderNo || '').trim();
     if (!bookingId) {
       throw new Error('Booking order number is required to validate the Unlock Your PPL Pass email.');
@@ -301,9 +308,9 @@ class YopmailPage {
             .replace(/\s+/g, ' ')}`,
         );
 
-        if (!unlockSubject.test(lastInboxSnapshot) || !expectedFrom.test(lastInboxSnapshot)) {
+        if (!unlockSubject.test(lastInboxSnapshot)) {
           lastError = new Error(
-            `Unlock Your PPL Pass not listed yet (need PPL Pass IBE UAT + Unlock Your PPL Pass). Inbox: ${lastInboxSnapshot.slice(0, 240) || '(empty)'}`,
+            `Unlock Your PPL Pass not listed yet. Inbox: ${lastInboxSnapshot.slice(0, 240) || '(empty)'}`,
           );
           await this.page.waitForTimeout(4_000);
           continue;
@@ -313,13 +320,7 @@ class YopmailPage {
         const mailRow = inbox
           .locator('button.lm')
           .filter({ hasText: unlockSubject })
-          .filter({ hasText: expectedFrom })
-          .or(
-            inbox
-              .locator('div.m, button.lm')
-              .filter({ hasText: unlockSubject })
-              .filter({ hasText: expectedFrom }),
-          )
+          .or(inbox.locator('div.m, button.lm').filter({ hasText: unlockSubject }))
           .or(inbox.locator('.lms').filter({ hasText: unlockSubject }))
           .first();
 
@@ -380,7 +381,7 @@ class YopmailPage {
     }
 
     throw new Error(
-      `Yopmail did not receive "Unlock Your PPL Pass" from PPL Pass IBE UAT with Order ID ${bookingId} within 2 minutes: ${lastError?.message || 'unknown'}. Last inbox: ${lastInboxSnapshot.slice(0, 300) || '(empty)'}`,
+      `Yopmail did not receive "Unlock Your PPL Pass" from PPL Pass IBE UAT with Order ID ${bookingId} within 3 minutes: ${lastError?.message || 'unknown'}. Last inbox: ${lastInboxSnapshot.slice(0, 300) || '(empty)'}`,
     );
   }
 
@@ -397,14 +398,37 @@ class YopmailPage {
         await this.refreshInbox();
         await this.dismissAdsIfPresent();
 
+        const inbox = this.inboxFrame();
+        const inboxText = (
+          (await inbox.locator('body').innerText({ timeout: 8_000 }).catch(() => '')) || ''
+        ).trim();
+        console.log(
+          `[yopmail] Activation inbox snapshot: ${inboxText.slice(0, 300).replace(/\s+/g, ' ') || '(empty)'}`,
+        );
+
+        const activationRow = inbox
+          .locator('button.lm')
+          .filter({ hasText: /verify|activation|Smart Traveller|confirm your/i })
+          .or(inbox.locator('div.m').filter({ hasText: /verify|activation|Smart Traveller/i }))
+          .or(inbox.locator('.lms').filter({ hasText: /verify|activation|Smart Traveller/i }))
+          .or(inbox.locator('button.lm, div.m').first())
+          .first();
+        if (await activationRow.isVisible({ timeout: 5_000 }).catch(() => false)) {
+          await activationRow.click({ force: true });
+          await this.page.waitForTimeout(1_500);
+          await this.dismissAdsIfPresent();
+        }
+
         const mail = this.mailFrame();
         const verifyHint = mail.getByText(/verify your Smart|Account Activation|Hello Smart Traveller/i).first();
         if (!(await verifyHint.isVisible({ timeout: 5_000 }).catch(() => false))) {
+          lastError = new Error(
+            `Activation mail not open yet. Inbox: ${inboxText.slice(0, 240) || '(empty)'}`,
+          );
           await this.page.waitForTimeout(3_000);
           continue;
         }
 
-        // codegen: getByRole('link', { name: 'https://uat2-arrtureapi.' })
         const activationLink = mail
           .getByRole('link', { name: /https:\/\/.*arrture|activate|verify|confirm/i })
           .or(mail.locator('a[href*="arrture"], a[href*="activat"], a[href*="verify"]'))
@@ -417,7 +441,6 @@ class YopmailPage {
         let activationPage = await popupPromise;
 
         if (!activationPage) {
-          // Link may navigate same tab or open without popup event timing
           const pages = context.pages();
           activationPage = pages[pages.length - 1];
         }

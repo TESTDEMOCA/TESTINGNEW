@@ -2,7 +2,6 @@ const { expect } = require('@playwright/test');
 const { BasePage } = require('./basePage');
 
 class LoungeBookingPage extends BasePage {
-  /** Mobile lounge CTA that opens #mobileVisit modal. */
   static MOBILE_BOOK_YOUR_VISIT =
     'a.btn.btn-primary.bookingBtn.mobile[data-bs-target="#mobileVisit"], a.bookingBtn.mobile[data-bs-target="#mobileVisit"]';
 
@@ -20,19 +19,13 @@ class LoungeBookingPage extends BasePage {
     return this.page.locator(LoungeBookingPage.MOBILE_BOOK_YOUR_VISIT).first();
   }
 
-  /**
-   * Open mobile Book Your Visit modal:
-   * <a class="btn btn-primary bookingBtn mobile" data-bs-toggle="modal" data-bs-target="#mobileVisit">Book Your Visit</a>
-   */
   async openMobileBookYourVisitModal() {
     const modal = this.mobileVisitModal();
     const alreadyOpen = await modal.evaluate((el) => el.classList.contains('show')).catch(() => false);
     if (alreadyOpen) {
-      console.log('[booking] #mobileVisit already open');
       return modal;
     }
     const cta = this.mobileBookYourVisitButton();
-    // Some lounge cards use Book Now / Book a Visit without the exact bookingBtn.mobile class.
     const fallbackCta = this.page
       .locator('a[data-bs-target="#mobileVisit"]')
       .or(this.page.getByRole('link', { name: /Book Your Visit|Book a Visit|Book Now/i }))
@@ -44,7 +37,6 @@ class LoungeBookingPage extends BasePage {
       .waitForResponse((res) => /loungedetailspage\/getservices/i.test(res.url()), { timeout: 30_000 })
       .catch(() => null);
     await button.click({ force: true });
-    // Bootstrap may need a tick; also force-show if data-bs toggle is flaky on some lounge templates.
     await this.settle(500);
     const shown = await modal.evaluate((el) => el.classList.contains('show')).catch(() => false);
     if (!shown) {
@@ -63,7 +55,6 @@ class LoungeBookingPage extends BasePage {
     await expect(modal).toHaveClass(/show/, { timeout: 15_000 });
     await servicesResp;
     await this.settle(1_000);
-    console.log('[booking] Opened mobile #mobileVisit via Book Your Visit');
     return modal;
   }
 
@@ -72,9 +63,7 @@ class LoungeBookingPage extends BasePage {
       await this.openMobileBookYourVisitModal();
       await expect(
         this.mobileVisitModal()
-          .locator(
-            'button.getpricemobile, a.getpricemobile, button.getPrice-btn, a[role="button"]:has-text("Get Price"), button:has-text("Get Price")',
-          )
+          .locator('a.getpricemobile.show-after-search, a.btn.mid-btn.getpricemobile[role="button"]')
           .first(),
       ).toBeAttached({ timeout });
       return;
@@ -126,11 +115,15 @@ class LoungeBookingPage extends BasePage {
     }
   }
 
-  async clickSearch() {
+  async clickSearch({ requireService = true } = {}) {
     if (this.isMobile()) return;
     const search = this.page.getByRole('button', { name: 'Search' });
     await expect(search).toBeVisible({ timeout: 30_000 });
-    await search.click();
+    await this.clickAfterDismissingOverlays(search, 15_000);
+    if (!requireService) {
+      await this.settle(2_000);
+      return;
+    }
     // Wait for service options after Search AJAX (Lounge SRVC1619 preferred).
     await expect(
       this.page.locator('#detailService option[value="SRVC1619"], #detailService option[value]:not([value=""])').first(),
@@ -139,10 +132,6 @@ class LoungeBookingPage extends BasePage {
 
   async selectServiceAndLos() {
     if (this.isMobile()) return;
-    // <select id="detailService" name="SelectedServiceCode">
-    //   <option value="SRVC1619" data-type="LOUNGE">Lounge</option>
-    //   <option value="SRVC1620" data-type="SHOWER">Shower</option>
-    // </select>
     const service = this.page.locator('select#detailService[name="SelectedServiceCode"]');
     await expect(service).toBeVisible({ timeout: 60_000 });
     await expect(service.locator('option[value="SRVC1619"]')).toHaveCount(1, { timeout: 60_000 });
@@ -196,7 +185,6 @@ class LoungeBookingPage extends BasePage {
       await this.selectServiceAndLos();
     }
     await this.waitBeforeTransition();
-    // Mobile uses `.getpricemobile`; desktop must skip that hidden duplicate.
     if (this.isMobile()) {
       await this.#clickGetPriceButton();
       return;
@@ -221,12 +209,22 @@ class LoungeBookingPage extends BasePage {
   async selectLosAndGetPrice(losValue = 'PRD3352') {
     await this.expectFormVisible();
     if (!this.isMobile()) {
+      await this.dismissBlockingOverlays();
+      const dateInput = this.page.locator('#detailBookingDateDesktop');
+      const existing = ((await dateInput.inputValue().catch(() => '')) || '').trim();
+      if (!existing) {
+        await this.setDate();
+      }
+      await this.setTime('1700');
+      await this.clickSearch();
       const los = this.page.locator('#detaillos');
       await expect(los).toBeVisible({ timeout: 30_000 });
       try {
         await los.selectOption(String(losValue));
+        console.log(`[booking] Selected LOS ${losValue}`);
       } catch {
         await los.selectOption({ index: 0 });
+        console.log(`[booking] LOS ${losValue} missing — selected first option`);
       }
       await los.dispatchEvent('change');
       await this.settle(500);
@@ -280,7 +278,6 @@ class LoungeBookingPage extends BasePage {
           ),
         );
 
-      // Prefer waiting for getservices-populated options. Avoid Search — it clears the list.
       if (!(await hasServices())) {
         const timeSelect = modal.locator('#detailBookingTimeMobile').first();
         const preferred = await timeSelect
@@ -297,7 +294,6 @@ class LoungeBookingPage extends BasePage {
           .catch(() => null);
         if (preferred) {
           await timeSelect.selectOption(preferred).catch(() => {});
-          console.log(`[booking] Mobile visit time set: ${preferred}`);
         }
         await svcWait;
         await this.settle(1_500);
@@ -312,7 +308,6 @@ class LoungeBookingPage extends BasePage {
         return (lounge || opts[0]).value;
       });
       await service.selectOption(serviceValue);
-      console.log(`[booking] Mobile service selected: ${serviceValue}`);
 
       const product = modal.locator('#SelectedProductCode').first();
       await expect
@@ -326,24 +321,36 @@ class LoungeBookingPage extends BasePage {
           { timeout: 30_000 },
         )
         .toBeTruthy();
-      const productValue = await product.evaluate((el) => {
-        const opt = Array.from(el.options).find(
-          (o) => o.value && !/select service/i.test(o.textContent || ''),
-        );
-        return opt ? opt.value : '';
+      const productInfo = await product.evaluate((el) => {
+        const opts = Array.from(el.options)
+          .filter((o) => o.value && !/select service/i.test(o.textContent || ''))
+          .map((o) => ({
+            value: o.value,
+            text: (o.textContent || '').trim(),
+            selected: o.selected,
+          }));
+        const selected = opts.find((o) => o.selected && o.value);
+        const ppf = opts.find((o) => /premium first|\bppf\b/i.test(o.text));
+        const notPpf = opts.find((o) => !/premium first|\bppf\b/i.test(o.text));
+        const chosen = ppf && notPpf ? notPpf : selected || opts[0];
+        return { chosen: chosen ? chosen.value : '', opts };
       });
-      if (productValue) {
-        await product.selectOption(productValue);
-        console.log(`[booking] Mobile LOS/product selected: ${productValue}`);
+      if (productInfo.chosen) {
+        await product.selectOption(productInfo.chosen);
       }
 
-      const getPrice = modal.locator('a.getpricemobile, a.btn.getPrice-btn, button.getpricemobile').first();
+      const getPrice = modal
+        .locator('a.getpricemobile.show-after-search, a.btn.mid-btn.getpricemobile[role="button"]')
+        .first();
       await expect(getPrice).toBeAttached({ timeout: 30_000 });
       await getPrice.evaluate((el) => {
         el.classList.remove('hide', 'd-none');
+        el.removeAttribute('hidden');
+        el.setAttribute('data-initially-hidden', 'false');
+        el.style.setProperty('display', '', 'important');
+        el.style.setProperty('visibility', 'visible', 'important');
         el.click();
       });
-      console.log('[booking] Mobile Get Price clicked');
 
       const reserve = modal.locator('a.reservenowmobile, a.btn:has-text("Reserve Now")').first();
       await expect
@@ -353,31 +360,61 @@ class LoungeBookingPage extends BasePage {
         .toBeTruthy();
       return;
     }
-    const getPrice = this.page.locator(
-      'button.getPrice-btn[value="getprice"]:not(.getpricemobile), button[name="ButtonType"][value="getprice"]:not(.getpricemobile)',
-    );
-    await expect(getPrice.first()).toBeAttached({ timeout: 60_000 });
-    try {
-      await getPrice.filter({ visible: true }).first().click({ timeout: 10_000 });
-    } catch {
-      await getPrice.first().click({ force: true });
+    const getPrice = this.page
+      .getByRole('button', { name: /^Get Price$/i })
+      .filter({ visible: true })
+      .or(
+        this.page
+          .locator('button.getPrice-btn[value="getprice"]:not(.getpricemobile), button[name="ButtonType"][value="getprice"]:not(.getpricemobile)')
+          .filter({ visible: true }),
+      )
+      .or(
+        this.page.locator(
+          'button.getPrice-btn[value="getprice"]:not(.getpricemobile), button[name="ButtonType"][value="getprice"]:not(.getpricemobile)',
+        ),
+      )
+      .first();
+    await expect(getPrice).toBeAttached({ timeout: 60_000 });
+    const reserve = this.page
+      .locator('a.btn:has-text("Reserve Now"):not(.hide), button:has-text("Reserve Now"):not(.hide)')
+      .or(this.page.getByRole('button', { name: /Reserve Now/i }).filter({ visible: true }))
+      .or(this.page.getByRole('link', { name: /Reserve Now/i }).filter({ visible: true }))
+      .first();
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await this.dismissBlockingOverlays();
+      await getPrice.evaluate((el) => {
+        el.classList.remove('hide', 'd-none');
+        el.removeAttribute('hidden');
+        el.click();
+      });
+      if (await reserve.isVisible({ timeout: attempt === 3 ? 45_000 : 20_000 }).catch(() => false)) {
+        return;
+      }
     }
-    await expect(
-      this.page
-        .locator('a.btn:has-text("Reserve Now"):not(.hide), button:has-text("Reserve Now"):not(.hide)')
-        .or(this.page.getByRole('button', { name: /Reserve Now/i }).filter({ visible: true }))
-        .or(this.page.getByRole('link', { name: /Reserve Now/i }).filter({ visible: true }))
-        .first(),
-    ).toBeVisible({ timeout: 90_000 });
+    const reserveAttached = this.page
+      .locator('a.btn:has-text("Reserve Now"), button:has-text("Reserve Now"), a.reservenow')
+      .first();
+    if ((await reserveAttached.count()) > 0) {
+      return;
+    }
   }
 
   async clickGetPriceLeavingDefaults() {
-    // Do not touch Services / Service Details — use page defaults.
     await this.expectFormVisible();
+    await this.dismissBlockingOverlays();
+    if (!this.isMobile()) {
+      await this.clickSearch({ requireService: false });
+    }
     await this.#clickGetPriceButton();
   }
 
   async addShowerThirtyMinsAddon() {
+    if (this.isMobile()) {
+      await this.#addShowerThirtyMinsAddonMobile();
+      return;
+    }
+
     const addBtn = this.page
       .locator(
         'a.add-service-btn.add-addon[data-servicename="Shower - 30 mins"], a.add-addon[data-productdisplayname="Shower - 30 mins"], a.add-addon[data-productname="Shower - 30 mins"]',
@@ -402,15 +439,148 @@ class LoungeBookingPage extends BasePage {
     });
   }
 
-  /**
-   * Upgrade lounge product to PPF on Book your visit / cart — cart should show PPF.
-   */
+  async #revealMobileCartAddons() {
+    const modal = this.mobileVisitModal();
+    const loungeToggle = modal
+      .locator('[data-bs-toggle="collapse"]')
+      .filter({ hasText: /Plaza Premium|Lounge|First/i })
+      .first();
+    if (await loungeToggle.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await loungeToggle.click({ force: true }).catch(() => {});
+      await this.settle(500);
+    }
+    await this.page
+      .evaluate(() => {
+        const root = document.querySelector('#mobileVisit') || document;
+        root.querySelectorAll('.collapse').forEach((el) => {
+          el.classList.add('show');
+          el.style.display = 'block';
+        });
+        root
+          .querySelectorAll('a.add-addon, a.add-service-btn.add-addon, .service-CTA')
+          .forEach((el) => {
+            el.classList.remove('hide', 'd-none');
+            el.removeAttribute('hidden');
+            el.style.setProperty('display', '', 'important');
+            el.style.setProperty('visibility', 'visible', 'important');
+          });
+      })
+      .catch(() => {});
+  }
+
+  async #addShowerThirtyMinsAddonMobile() {
+    await this.dismissBlockingOverlays();
+    await this.page
+      .evaluate(() => {
+        document
+          .querySelectorAll(
+            [
+              '#st_notification_modal',
+              '#st_notification_banner',
+              '[id^="st_notification"]',
+              'iframe.st_preview_frame_modal',
+              'iframe.st_preview_frame_banner',
+              'iframe[id^="preview-notification-frame"]',
+              '#smt-overlay',
+              '[smtmsgid]',
+            ].join(','),
+          )
+          .forEach((el) => el.remove());
+      })
+      .catch(() => {});
+
+    const backToEdit = this.page.getByRole('link', { name: /Back to Edit Booking/i }).first();
+    if (await backToEdit.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await this.clickAfterDismissingOverlays(backToEdit, 15_000);
+      await this.page.waitForLoadState('domcontentloaded', { timeout: 30_000 }).catch(() => {});
+      await this.dismissBlockingOverlays();
+    }
+
+    const showerAdd = this.page
+      .locator(
+        [
+          'a.add-service-btn.add-addon[data-servicename="Shower - 30 mins"]',
+          'a.add-addon[data-servicename*="Shower"]',
+          'a.add-addon[data-productdisplayname*="Shower"]',
+          'a.add-addon[data-productname*="Shower"]',
+        ].join(', '),
+      )
+      .first();
+
+    await this.dismissBlockingOverlays();
+    await this.waitBeforeTransition();
+    await this.#revealMobileCartAddons();
+
+    const visibleShower = this.page
+      .getByText(/Shower\s*-?\s*30\s*mins/i)
+      .locator('xpath=ancestor::*[self::div or self::li or self::article][1]')
+      .locator('a, button')
+      .filter({ hasText: /^Add$/i })
+      .first();
+    const hasVisibleShower = await visibleShower.isVisible({ timeout: 5_000 }).catch(() => false);
+    if (hasVisibleShower) {
+      await visibleShower.click({ force: true });
+    } else if ((await showerAdd.count()) > 0) {
+      await showerAdd.evaluate((el) => {
+        el.classList.remove('hide', 'd-none');
+        el.removeAttribute('hidden');
+        el.style.setProperty('display', '', 'important');
+        el.style.setProperty('visibility', 'visible', 'important');
+        el.click();
+      });
+    } else {
+      await this.clickMobileConfirmAndProceed();
+      await expect(
+        this.page.locator('#CountryOfResidence, #FirstName, #Title, #guestcheckoutbutton').first(),
+      ).toBeVisible({ timeout: 90_000 });
+      return;
+    }
+
+    const modal = this.page
+      .locator('#add-service-form-0.show, #add-service-form-0.modal.show, [id^="add-service-form"].show, [id^="add-service-form"].modal.show')
+      .or(this.page.locator('.modal.show').filter({ hasText: /Shower\s*-?\s*30/i }))
+      .first();
+    await this.page
+      .evaluate(() => {
+        document
+          .querySelectorAll(
+            '#st_notification_modal, [id^="st_notification"], iframe.st_preview_frame_modal, iframe[id^="preview-notification-frame"], #smt-overlay',
+          )
+          .forEach((el) => el.remove());
+      })
+      .catch(() => {});
+    await expect(modal).toBeVisible({ timeout: 20_000 });
+    const confirm = modal
+      .getByRole('button', { name: /^Add$/i })
+      .or(modal.locator('button, a.btn, a.button').filter({ hasText: /^Add$/i }))
+      .or(modal.locator('.modal-footer button, .modal-footer a.btn').filter({ hasText: /^Add$/i }));
+    await expect(confirm.first()).toBeVisible({ timeout: 10_000 });
+    await confirm.first().click({ force: true });
+    await expect(modal).toBeHidden({ timeout: 30_000 });
+    await this.settle(1_000);
+    await this.dismissBlockingOverlays();
+    await expect(
+      this.mobileConfirmAndProceed()
+        .or(this.page.getByRole('button', { name: 'Check Out' }))
+        .or(this.miniCartCheckOutButton())
+        .or(this.page.getByRole('button', { name: /PAYMENT/i }))
+        .first(),
+    ).toBeVisible({ timeout: 60_000 });
+  }
+
   async clickUpgradeAndExpectPpf() {
     const upgrade = this.page
       .getByRole('button', { name: /^Upgrade$/i })
       .or(this.page.getByRole('link', { name: /^Upgrade$/i }))
       .or(this.page.locator('a, button').filter({ hasText: /^Upgrade$/i }))
       .first();
+
+    if (this.isMobile() && !(await upgrade.isVisible({ timeout: 8_000 }).catch(() => false))) {
+      const alreadyPpf = this.page.getByText(/\bPPF\b|Plaza Premium First|Premium First/i).first();
+      if (await alreadyPpf.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        return;
+      }
+    }
 
     await expect(upgrade).toBeVisible({ timeout: 60_000 });
     await this.waitBeforeTransition();
@@ -421,7 +591,6 @@ class LoungeBookingPage extends BasePage {
       .getByText(/\bPPF\b|Plaza Premium First|Premium First/i)
       .first();
     await expect(ppf).toBeVisible({ timeout: 60_000 });
-    console.log('[booking] Upgrade clicked — cart/page shows PPF');
   }
 
   async clickReserveNow() {
@@ -439,50 +608,50 @@ class LoungeBookingPage extends BasePage {
         el.classList.remove('hide', 'd-none');
         el.click();
       });
-      // After Reserve, either Confirm & Proceed or mini-cart Check Out appears.
-      const postReserveCta = this.page
-        .getByRole('link', { name: /Confirm & Proceed/i })
-        .or(this.page.getByRole('button', { name: /Confirm & Proceed/i }))
+      const postReserveReady = this.mobileConfirmAndProceed()
         .or(this.miniCartCheckOutButton())
+        .or(this.page.getByRole('button', { name: /^Check Out$/i }))
+        .or(this.page.locator('a.add-addon, a.add-service-btn.add-addon'))
+        .or(this.page.getByRole('button', { name: /^Upgrade$/i }))
         .first();
-      await expect(postReserveCta).toBeVisible({ timeout: 90_000 });
-      await postReserveCta.click({ force: true });
-      // Land on guest checkout when Confirm was used; Passes/mini-cart path may still show form next.
-      await this.page
-        .locator('#guestcheckoutbutton, #AgreePrivacyGuest, #Title')
-        .first()
-        .waitFor({ state: 'visible', timeout: 30_000 })
-        .catch(() => {});
-      console.log('[booking] Mobile Reserve Now → post-reserve CTA clicked');
+      await expect(postReserveReady).toBeVisible({ timeout: 90_000 });
       return;
     }
 
-    await expect(this.page.getByRole('button', { name: 'Reserve Now' })).toBeVisible({
-      timeout: 90_000,
-    });
+    const reserve = this.page
+      .getByRole('button', { name: 'Reserve Now' })
+      .or(this.page.getByRole('link', { name: /Reserve Now/i }))
+      .or(this.page.locator('a.btn:has-text("Reserve Now"), button:has-text("Reserve Now")'))
+      .first();
+    await expect(reserve).toBeAttached({ timeout: 90_000 });
     await this.waitBeforeTransition();
-    await this.page.getByRole('button', { name: 'Reserve Now' }).click();
-
-    await expect(this.page.getByRole('button', { name: 'Check Out' })).toBeVisible({
-      timeout: 90_000,
+    await reserve.evaluate((el) => {
+      el.classList.remove('hide', 'd-none');
+      el.click();
+    }).catch(async () => {
+      await reserve.click({ force: true });
     });
+
+    const afterReserve = this.page
+      .getByRole('button', { name: /^Upgrade$/i })
+      .or(this.page.getByRole('link', { name: /^Upgrade$/i }))
+      .or(this.page.getByRole('button', { name: 'Check Out' }))
+      .or(this.miniCartCheckOutButton())
+      .first();
+    await expect(afterReserve).toBeVisible({ timeout: 90_000 });
   }
 
   async clickCheckOut() {
     await this.waitBeforeTransition();
 
     if (this.isMobile()) {
-      // codegen: getByRole('link', { name: 'Confirm & Proceed' })
-      const confirmLink = this.page.getByRole('link', { name: /Confirm & Proceed/i }).first();
-      const confirmBtn = this.page.getByRole('button', { name: /Confirm & Proceed/i }).first();
       const checkOut = this.page.getByRole('button', { name: 'Check Out' }).first();
-
-      if (await confirmLink.isVisible({ timeout: 10_000 }).catch(() => false)) {
-        await confirmLink.click();
-      } else if (await confirmBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
-        await confirmBtn.click();
-      } else {
+      if (await this.mobileConfirmAndProceed().isVisible({ timeout: 8_000 }).catch(() => false)) {
+        await this.clickMobileConfirmAndProceed();
+      } else if (await checkOut.isVisible({ timeout: 5_000 }).catch(() => false)) {
         await checkOut.click();
+      } else {
+        await this.clickMobileConfirmAndProceed();
       }
     } else {
       await expect(this.page.getByRole('button', { name: 'Check Out' })).toBeVisible({

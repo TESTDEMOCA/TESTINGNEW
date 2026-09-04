@@ -163,6 +163,7 @@ When('I complete guest checkout for TC01', async function () {
     phone: '8899003322',
     email: 'test@www.com',
   };
+  this.guestFirstName = data.firstName;
   await checkout(this).fillGuestCheckoutForm(data);
   await checkout(this).acceptCheckoutRadiosAndTerms({
     expectButton: 'payment',
@@ -179,6 +180,7 @@ When('I complete guest checkout for TC03', async function () {
     phone: '8899007766',
     email: 'testd@www.com',
   };
+  this.guestFirstName = data.firstName;
   await checkout(this).fillGuestCheckoutForm(data);
   await checkout(this).acceptCheckoutRadiosAndTerms({
     expectButton: 'payment',
@@ -200,6 +202,7 @@ When('I complete guest checkout for TC01_Pass', async function () {
     phone: '8899007766',
     email: this.signupEmail
   };
+  this.guestFirstName = data.firstName;
   await checkout(this).fillGuestCheckoutForm(data);
   await checkout(this).acceptCheckoutRadiosAndTerms({
     expectButton: 'payment',
@@ -216,6 +219,7 @@ When('I complete guest checkout for TC04', async function () {
     phone: '8877445566',
     email: 'shower@www.com',
   };
+  this.guestFirstName = data.firstName;
   await checkout(this).fillGuestCheckoutForm(data);
   await checkout(this).acceptCheckoutRadiosAndTerms({
     expectButton: 'payment',

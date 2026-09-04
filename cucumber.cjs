@@ -18,6 +18,7 @@ const common = {
     'src/steps/checkout.steps.js',
     'src/steps/payment.steps.js',
     'src/steps/lms.steps.js',
+    'src/steps/ams.steps.js',
     'src/steps/passes.steps.js',
   ],
   format: [

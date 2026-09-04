@@ -13,6 +13,7 @@ const { loadSettings } = require('../config/settings');
 const { generateTestData } = require('../utils/testData');
 const { ensureDir } = require('../utils/helpers');
 const { closeYopmailSession } = require('../support/yopmailSession');
+const { installSalesManagoAutoClose, clickSalesManagoClose } = require('../support/salesManago');
 
 const REPO_ROOT = path.join(__dirname, '../..');
 const isDebug = ['1', 'true', 'yes'].includes(String(process.env.PWDEBUG || '').toLowerCase());
@@ -139,6 +140,11 @@ Before(async function () {
   const contextOptions = {
     ...this.settings.contextOptions(),
     storageState: undefined,
+  // PPL 2.0 staging HTTP Basic Authentication
+    httpCredentials: {
+      username: process.env.PPL_BASIC_USER,
+      password: process.env.PPL_BASIC_PASSWORD,
+    },
   };
   const artifactKey = `${this.settings.browser.name}-${this.settings.deviceName}`;
 
@@ -156,6 +162,10 @@ Before(async function () {
   this.page = await this.context.newPage();
   this.page.setDefaultTimeout(90_000);
   this.page.setDefaultNavigationTimeout(90_000);
+  await installSalesManagoAutoClose(this.page);
+  this.context.on('page', (popup) => {
+    installSalesManagoAutoClose(popup).catch(() => {});
+  });
 
   // Mandatory wipe before every scenario/run.
   await clearBrowserSession(this.context, this.page, this.settings);
@@ -386,6 +396,9 @@ async function persistScenarioVideo({
 }
 
 AfterStep(async function ({ pickleStep, result }) {
+  if (this.page) {
+    await clickSalesManagoClose(this.page).catch(() => {});
+  }
   if (result.status !== Status.FAILED || !this.page) {
     return;
   }

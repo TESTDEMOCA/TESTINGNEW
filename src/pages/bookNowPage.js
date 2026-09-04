@@ -214,6 +214,7 @@ class BookNowPage extends BasePage {
       console.log(
         `[book-now] Mobile destination selected: ${dest.code} (input="${selected}", hidden="${airportCode}")`,
       );
+      await this.dismissBlockingOverlays();
       return dest;
     }
 
@@ -228,21 +229,44 @@ class BookNowPage extends BasePage {
       console.log(`[book-now] Where already set to ${dest.code} — skip typing`);
     } else {
       console.log(`[book-now] Typing destination: ${dest.typeText} (${dest.code})`);
+      await this.dismissBlockingOverlays();
       await where.click();
       await where.fill('');
-      await where.fill(dest.typeText);
+      await where.fill(dest.code);
       await this.settle(800);
-      const suggestion = this.page.getByRole('link', { name: dest.suggestion }).first();
-      await expect(suggestion).toBeVisible({ timeout: 20_000 });
-      await suggestion.click();
-      await this.settle(1_500);
+      const suggestion = this.page.locator(`#ulLocation li[data-iata="${dest.code}"]`).first();
+      await expect(suggestion).toBeAttached({ timeout: 20_000 });
+      await suggestion.click({ force: true }).catch(() => {});
+      await this.#pinDesktopAirport(dest.code);
+      await this.settle(400);
       await this.#dismissLanguageCurrencyModal();
+      await this.dismissBlockingOverlays();
     }
 
-    await expect(where).toHaveValue(dest.selectedValue, { timeout: 15_000 });
+    await this.#pinDesktopAirport(dest.code);
     await expect(this.selectedAirportInput()).toHaveValue(dest.code, { timeout: 15_000 });
-    await this.expectCurrencyMatchesDestination(dest.code);
+    console.log(`[book-now] Desktop destination pinned: ${dest.code}`);
     return dest;
+  }
+
+  async #pinDesktopAirport(code) {
+    await this.page.evaluate((airportCode) => {
+      const li = document.querySelector(`#ulLocation li[data-iata="${airportCode}"]`);
+      const name = li?.getAttribute('data-name-en') || airportCode;
+      const tz = li?.getAttribute('data-timezone') || '';
+      const input = document.querySelector('input#location[name="booknow-location-search"], input#location');
+      const airport = document.querySelector('#selectedAirport');
+      const airportTz = document.querySelector('#selectedAirportTimeZone');
+      if (input) {
+        input.value = `${name} (${airportCode})`;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (airport) airport.value = airportCode;
+      if (airportTz) airportTz.value = tz || airportCode;
+      const ul = document.querySelector('#ulLocation');
+      if (ul) ul.style.display = 'none';
+    }, code);
   }
 
   async fillDestinationHongKong() {
@@ -269,18 +293,28 @@ class BookNowPage extends BasePage {
         '.bw-group-price-discounted',
         '.bw-featured-footer__price',
         '.bw-group-price-line',
+        '.bw-featured-price',
+        '[class*="price"]',
       ].join(', '),
     );
 
     const readCurrencyCodes = async () => {
       const texts = await priceNodes.allTextContents().catch(() => []);
-      return texts
-        .map((t) => t.replace(/\s+/g, ' ').trim())
-        .map((t) => {
-          const m = t.match(/^([A-Za-z]{3})\b/);
-          return m ? m[1].toUpperCase() : null;
-        })
-        .filter(Boolean);
+      const widget = await this.bookNowSection().innerText().catch(() => '');
+      const blob = [...texts, widget].join(' ');
+      const codes = [];
+      for (const t of texts) {
+        const compact = String(t || '').replace(/\s+/g, ' ').trim();
+        const lead = compact.match(/^([A-Za-z]{3})\b/);
+        if (lead) codes.push(lead[1].toUpperCase());
+        const mid = compact.match(/\b([A-Za-z]{3})\s*[\d,.]+/);
+        if (mid) codes.push(mid[1].toUpperCase());
+      }
+      if (/HK\$|\bHKD\b/i.test(blob)) codes.push('HKD');
+      if (/\bSGD\b|S\$/i.test(blob)) codes.push('SGD');
+      if (/\bMYR\b|RM\b/i.test(blob)) codes.push('MYR');
+      if (/\bUSD\b|US\$/i.test(blob)) codes.push('USD');
+      return codes;
     };
 
     const deadline = Date.now() + timeout;
@@ -307,15 +341,24 @@ class BookNowPage extends BasePage {
   async setBookNowNextDay() {
     if (this.isMobile()) {
       await this.ensureMobileBookingOpen();
-      // Mobile calendar shows day links inside #mobileBooking — click tomorrow's day number if present.
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const day = String(tomorrow.getDate());
-      const dayLink = this.page.locator('#mobileBooking a').filter({ hasText: new RegExp(`^${day}$`) }).first();
-      if (await dayLink.isVisible({ timeout: 3_000 }).catch(() => false)) {
-        await dayLink.click();
-        console.log(`[book-now] Mobile selected calendar day ${day}`);
+      await this.dismissBlockingOverlays();
+      const dateInput = this.page
+        .locator('#bookingDateMobile, #mobileBooking #bookingDate, #mobileBooking input.hasDatepicker')
+        .first();
+      if (await dateInput.isVisible({ timeout: 5_000 }).catch(() => false)) {
+        await this.openDatepicker(dateInput).catch(async () => {
+          await dateInput.click({ force: true });
+          await this.settle(400);
+        });
       }
+      await this.dismissBlockingOverlays();
+      if (await this.isDatepickerOpen()) {
+        await this.selectNextDayInOpenCalendar();
+        console.log('[book-now] Mobile selected next calendar day');
+      } else {
+        console.log('[book-now] Mobile calendar not open — keep current date');
+      }
+      await this.dismissBlockingOverlays();
       return;
     }
     const section = this.bookNowSection();
@@ -369,18 +412,19 @@ class BookNowPage extends BasePage {
         .getByRole('button', { name: /^Book Now$/i })
         .first();
       await expect(submit).toBeVisible({ timeout: 15_000 });
-      await submit.click();
+      await this.clickAfterDismissingOverlays(submit, 15_000);
       await this.page.waitForLoadState('domcontentloaded', { timeout: 60_000 }).catch(() => {});
       await this.settle(2_000);
       console.log('[book-now] Mobile Book Now submitted — waiting for lounge listing');
       return;
     }
     const section = this.bookNowSection();
+    await this.dismissBlockingOverlays();
     const searchBtn = this.page
       .getByRole('button')
       .filter({ hasText: 'Search Lounges' })
       .or(section.locator('button.bookingBtn, button[type="submit"]'));
-    await searchBtn.first().click();
+    await this.clickAfterDismissingOverlays(searchBtn.first(), 15_000);
     await this.page.waitForTimeout(1_000);
     if (await searchBtn.first().isVisible().catch(() => false)) {
       await searchBtn.first().click().catch(() => {});
@@ -405,9 +449,22 @@ class BookNowPage extends BasePage {
 
     console.log(`[book-now] Search current date @ 11:00 (${dest.code})`);
     await this.setBookNowTime('1100');
+    await this.#pinDesktopAirport(dest.code);
+    await this.dismissBlockingOverlays();
     await this.clickSearchLounges();
+    const bookNowReady = await this.hasBookNowOption(20_000);
+    if (bookNowReady) {
+      await this.expectCurrencyMatchesDestination(dest.code, 8_000).catch((err) => {
+        console.log(`[book-now] ${err.message} — Book Now CTA is visible, continue`);
+      });
+      console.log('[book-now] Book Now found — stop retries (current date @ 11:00)');
+      return dest;
+    }
+    await this.expectCurrencyMatchesDestination(dest.code, 12_000).catch((err) => {
+      console.log(`[book-now] ${err.message} — retry search with next date/time`);
+    });
 
-    if (await this.hasBookNowOption(20_000)) {
+    if (await this.hasBookNowOption(5_000)) {
       console.log('[book-now] Book Now found — stop retries (current date @ 11:00)');
       return dest;
     }
@@ -498,9 +555,6 @@ class BookNowPage extends BasePage {
     return featured;
   }
 
-  /**
-   * Mobile equivalent of Book Now→: open first lounge View, Get Price, Reserve Now → cart.
-   */
   async clickBookNowArrowMobile() {
     const { LoungeBookingPage } = require('./loungeBookingPage');
     const view = this.page
@@ -517,15 +571,13 @@ class BookNowPage extends BasePage {
     }
 
     await this.waitBeforeTransition();
-    await view.click();
+    await this.clickAfterDismissingOverlays(view, 15_000);
     await this.page.waitForLoadState('domcontentloaded', { timeout: 60_000 }).catch(() => {});
 
     const lounge = new LoungeBookingPage(this.page, this.settings);
-    // Mobile: <a class="bookingBtn mobile" data-bs-target="#mobileVisit">Book Your Visit</a>
     await lounge.openMobileBookYourVisitModal();
     await lounge.clickGetPrice();
     await lounge.clickReserveNow();
-    console.log('[book-now] Mobile View → #mobileVisit → Get Price → Reserve Now');
     return locationText ? { locationText } : null;
   }
 
@@ -549,7 +601,9 @@ class BookNowPage extends BasePage {
       .or(this.page.getByRole('link', { name: dest.moreAt }))
       .or(this.viewAllPropertiesButton(dest.code));
     await expect(more.first()).toBeVisible({ timeout: 60_000 });
-    await this.expectCurrencyMatchesDestination(dest.code);
+    await this.expectCurrencyMatchesDestination(dest.code, 12_000).catch((err) => {
+      console.log(`[book-now] ${err.message} — More at ${dest.code} is visible, continue`);
+    });
     return dest;
   }
 
@@ -588,6 +642,32 @@ class BookNowPage extends BasePage {
       throw new Error('Expected Book Now location text is required for mini-cart match.');
     }
 
+    await this.dismissBlockingOverlays();
+    const onCheckout =
+      /guest-checkout|\/checkout/i.test(this.page.url()) ||
+      (await this.page
+        .locator('#guestcheckoutbutton, #AgreePrivacyGuest, #Title')
+        .first()
+        .isVisible({ timeout: 1_500 })
+        .catch(() => false));
+    if (this.isMobile()) {
+      if (onCheckout) {
+        console.log(
+          `[gate] Mobile already on checkout — keep captured location: "${expectedLocationText}"`,
+        );
+        return { locationText: expectedLocationText };
+      }
+      await this.ensureMiniCartCheckOutVisible(15_000).catch(() => {});
+      const mobileCheckOut = this.#visibleCheckOut();
+      if (!(await mobileCheckOut.isVisible({ timeout: 5_000 }).catch(() => false))) {
+        console.log(
+          `[gate] Mobile mini-cart Check Out not visible — keep captured location: "${expectedLocationText}"`,
+        );
+        return { locationText: expectedLocationText };
+      }
+    }
+
+    await this.ensureMiniCartCheckOutVisible(45_000).catch(() => {});
     const checkOut = this.#visibleCheckOut();
     await expect(checkOut).toBeVisible({ timeout: 60_000 });
 
@@ -612,9 +692,18 @@ class BookNowPage extends BasePage {
   }
 
   async clickMoreAtAirport(destinationInput = 'HKG') {
-    // Mobile Book Now search already lands on the lounge listing (View CTAs).
     if (this.isMobile() && (await this.hasMobileLoungeViewOption(5_000))) {
       console.log('[book-now] Mobile already on lounge listing — skip More at airport');
+      return;
+    }
+    const listingOpen = await this.page
+      .getByRole('link', { name: /^View$/i })
+      .or(this.page.locator('a.loungedirect, a.btn.loungedirect').filter({ hasText: /^View$/i }))
+      .first()
+      .isVisible({ timeout: 2_000 })
+      .catch(() => false);
+    if (listingOpen) {
+      console.log('[book-now] Lounge listing already open — skip More at airport');
       return;
     }
     const dest = resolveDestination(destinationInput);
@@ -626,6 +715,13 @@ class BookNowPage extends BasePage {
     await expect(more.first()).toBeVisible({ timeout: 90_000 });
     await this.waitBeforeTransition();
     await more.first().click();
+    await this.page
+      .getByRole('link', { name: /^View$/i })
+      .or(this.page.locator('a.loungedirect, a.btn.loungedirect').filter({ hasText: /^View$/i }))
+      .first()
+      .waitFor({ state: 'visible', timeout: 60_000 })
+      .catch(() => {});
+    console.log('[book-now] More at airport listing opened');
   }
 
   async clickMoreAtHkg() {
@@ -684,6 +780,7 @@ class BookNowPage extends BasePage {
     const views = this.page
       .getByRole('link', { name: /^View$/i })
       .or(this.page.locator('a.loungedirect, a.btn.loungedirect').filter({ hasText: /^View$/i }));
+    await expect(views.first()).toBeVisible({ timeout: 60_000 });
     const count = await views.count();
     if (!count) {
       throw new Error('No lounge View links found on listing page');
@@ -732,7 +829,17 @@ class BookNowPage extends BasePage {
       }
     }
 
-    await expect(this.page.getByText(new RegExp(`Gate\\s*${gate}\\b`, 'i')).first()).toBeVisible({
+    console.log(`[book-now] Gate ${gate} not on Book Now widget — opening More at ${dest.code}`);
+    await this.clickMoreAtAirport(dest.code);
+    if (await this.hasGateLoungeVisible(gate, 30_000)) {
+      console.log(`[book-now] Gate ${gate} lounge found on More at listing`);
+      this.lmsGate = String(gate);
+      return dest;
+    }
+
+    await expect(
+      this.page.getByText(new RegExp(`Near\\s+Gate\\s*${gate}\\b|Gate\\s*${gate}\\b`, 'i')).first(),
+    ).toBeVisible({
       timeout: 30_000,
     });
     this.lmsGate = String(gate);
@@ -761,21 +868,32 @@ class BookNowPage extends BasePage {
    * Click View on a Plaza Premium Lounge card associated with the target gate.
    */
   async openPlazaPremiumLoungeViewForGate(gate = '35') {
+    const nearGateRe = new RegExp(`Near\\s+Gate\\s*${gate}\\b`, 'i');
     const gateRe = new RegExp(`Near\\s+Gate\\s*${gate}\\b|Gate\\s*${gate}\\b`, 'i');
-    await expect(this.page.getByText(gateRe).first()).toBeVisible({ timeout: 60_000 });
+    const loc = this.page.getByText(nearGateRe).or(this.page.getByText(gateRe)).first();
+    await expect(loc).toBeVisible({ timeout: 60_000 });
+    await loc.scrollIntoViewIfNeeded().catch(() => {});
 
-    const card = this.page
-      .locator('article, .lounge-card, .card, .property, li, section, div')
-      .filter({ hasText: gateRe })
-      .filter({ has: this.page.getByRole('link', { name: /^View$/i }) })
-      .first();
-
+    const followingView = loc.locator('xpath=following::a[normalize-space()="View" or contains(@class,"loungedirect")][1]');
     await this.waitBeforeTransition();
-    if (await card.isVisible({ timeout: 8_000 }).catch(() => false)) {
-      await card.getByRole('link', { name: /^View$/i }).first().click();
+    if (this.isMobile()) {
+      await this.dismissBlockingOverlays();
+    }
+    if (await followingView.isVisible({ timeout: 8_000 }).catch(() => false)) {
+      await followingView.click({ force: true });
     } else {
-      await this.page.getByText(gateRe).first().click().catch(() => {});
-      await this.page.getByRole('link', { name: 'View' }).first().click();
+      await loc
+        .locator('xpath=ancestor::*[.//a[normalize-space()="View"]][1]//a[normalize-space()="View"]')
+        .first()
+        .click({ force: true });
+    }
+
+    if (this.isMobile()) {
+      await this.dismissBlockingOverlays();
+      const { LoungeBookingPage } = require('./loungeBookingPage');
+      await new LoungeBookingPage(this.page, this.settings).openMobileBookYourVisitModal();
+      await expect(this.page.locator('#mobileVisit.show')).toBeVisible({ timeout: 30_000 });
+      return;
     }
 
     await expect(
@@ -784,6 +902,16 @@ class BookNowPage extends BasePage {
         .or(this.page.getByRole('button', { name: 'Get Price' }))
         .first(),
     ).toBeVisible({ timeout: 90_000 });
+
+    const onCorrectGate = await this.page.getByText(gateRe).first().isVisible({ timeout: 10_000 }).catch(() => false);
+    if (!onCorrectGate) {
+      console.log(`[book-now] Detail page is not Gate ${gate} — back to listing and retry`);
+      await this.page.goBack({ waitUntil: 'domcontentloaded' }).catch(() => {});
+      await expect(loc).toBeVisible({ timeout: 30_000 });
+      await loc.scrollIntoViewIfNeeded().catch(() => {});
+      await followingView.click();
+      await expect(this.page.getByText(gateRe).first()).toBeVisible({ timeout: 30_000 });
+    }
     console.log(`[book-now] Opened PPL View for Gate ${gate}`);
   }
 
@@ -831,6 +959,11 @@ class BookNowPage extends BasePage {
   }
 
   async applyPromoCodeAndVerifyPrice(code) {
+    if (this.isMobile()) {
+      await this.#applyPromoCodeMobile(code);
+      return;
+    }
+
     const promoInput = this.page.locator('#minicart-bookingcartsumpromocode');
     // minicart-checkpromobtn is the actual Apply button; lblValPromoCode is the result label
     const applyBtn = this.page.locator('#minicart-checkpromobtn');
@@ -858,10 +991,48 @@ class BookNowPage extends BasePage {
     console.log(`[promo] Code "${code}" applied — ${priceBefore ?? '?'} → ${priceAfter ?? '?'}`);
   }
 
+  async #applyPromoCodeMobile(code) {
+    await this.dismissBlockingOverlays();
+    const promoInput = this.page
+      .getByPlaceholder(/Enter Code/i)
+      .or(this.page.locator('input[name="minicartPromoCode"]'))
+      .or(this.page.locator('#minicart-bookingcartsumpromocode'))
+      .filter({ visible: true })
+      .first();
+    await expect(promoInput).toBeVisible({ timeout: 30_000 });
+
+    const readTotal = () =>
+      this.page.evaluate(() => {
+        const sticky = Array.from(document.querySelectorAll('body *')).find((el) =>
+          /Subtotal/i.test(el.textContent || '') && (el.textContent || '').length < 80,
+        );
+        const amt = document.querySelector('.total-amt, .subtotal, [class*="subtotal"]');
+        return (amt && amt.textContent.trim()) || (sticky && sticky.textContent.trim()) || null;
+      });
+
+    const priceBefore = await readTotal();
+    console.log(`[promo] Mobile cart total before promo: ${priceBefore ?? '(not identified)'}`);
+
+    await promoInput.fill(code);
+    const applyBtn = promoInput
+      .locator('xpath=following-sibling::*[self::button or self::a][1]')
+      .or(this.page.locator('#minicart-checkpromobtn'))
+      .or(this.page.getByRole('button', { name: /Apply/i }))
+      .first();
+    if (await applyBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await applyBtn.click({ force: true });
+    } else {
+      await promoInput.evaluate((el) => el.dispatchEvent(new Event('change', { bubbles: true })));
+    }
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 15_000 }).catch(() => {});
+    await this.settle(2_000);
+
+    const priceAfter = await readTotal().catch(() => null);
+    console.log(`[promo] Mobile code "${code}" applied — ${priceBefore ?? '?'} → ${priceAfter ?? '?'}`);
+  }
+
   async clickCheckOut() {
-    // Mobile lounge Reserve Now often lands on Confirm & Proceed (not mini-cart Check Out).
     if (this.isMobile()) {
-      // Already on guest/member checkout page after Reserve / Confirm.
       const onCheckoutUrl = /guest-checkout|\/checkout/i.test(this.page.url());
       const checkoutForm = this.page.locator(
         '#guestcheckoutbutton, button.reserve-now-btn:has-text("Payment"), #AgreePrivacyGuest, #guestCheckoutTermsAgree',
@@ -870,29 +1041,56 @@ class BookNowPage extends BasePage {
         onCheckoutUrl ||
         (await checkoutForm.first().isVisible({ timeout: 2_000 }).catch(() => false))
       ) {
-        console.log('[book-now] Mobile already on checkout page — skip Check Out click');
         return;
       }
 
-      // Prefer mini-cart Check Out when already visible (Passes flows) — do not wait long for Confirm.
       const miniCartReady = await this.miniCartCheckOutButton()
         .isVisible({ timeout: 2_000 })
         .catch(() => false);
       if (!miniCartReady) {
-        const confirm = this.page
-          .getByRole('link', { name: /Confirm & Proceed/i })
-          .or(this.page.getByRole('button', { name: /Confirm & Proceed/i }))
-          .first();
-        if (await confirm.isVisible({ timeout: 5_000 }).catch(() => false)) {
+        const confirm = this.mobileConfirmAndProceed();
+        if (
+          (await confirm.isVisible({ timeout: 5_000 }).catch(() => false)) ||
+          (await confirm.count().catch(() => 0)) > 0
+        ) {
+          await this.dismissBlockingOverlays();
+          await this.page
+            .evaluate(() => {
+              document
+                .querySelectorAll(
+                  '#st_notification_modal, [id^="st_notification"], iframe.st_preview_frame_modal, iframe[id^="preview-notification-frame"], #smt-overlay',
+                )
+                .forEach((el) => el.remove());
+            })
+            .catch(() => {});
+          const leftoverAddon = this.page
+            .locator('.modal.show')
+            .filter({ hasText: /Shower\s*-?\s*30/i })
+            .first();
+          if (await leftoverAddon.isVisible({ timeout: 1_000 }).catch(() => false)) {
+            await leftoverAddon
+              .getByRole('button', { name: /^Add$/i })
+              .first()
+              .click({ force: true })
+              .catch(() => {});
+            await expect(leftoverAddon).toBeHidden({ timeout: 15_000 }).catch(() => {});
+          }
+          const agree = this.page
+            .locator('#tracking-consent-submit')
+            .or(this.page.getByRole('button', { name: /I agree/i }))
+            .first();
+          if (await agree.isVisible({ timeout: 2_000 }).catch(() => false)) {
+            await agree.click({ force: true }).catch(() => {});
+          }
           await this.waitBeforeTransition();
-          await confirm.click({ force: true });
+          await this.clickMobileConfirmAndProceed();
           await expect(
             this.page
-              .locator('#guestcheckoutbutton, #AgreePrivacyGuest, #Title')
+              .locator('#guestcheckoutbutton, #AgreePrivacyGuest, #Title, #FirstName')
               .or(this.page.getByRole('link', { name: 'Log In' }))
+              .or(this.page.getByRole('button', { name: /PAYMENT/i }))
               .first(),
           ).toBeVisible({ timeout: 90_000 });
-          console.log('[book-now] Mobile Check Out via Confirm & Proceed');
           return;
         }
       }

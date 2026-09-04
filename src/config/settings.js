@@ -28,6 +28,8 @@ class Settings {
     this.lmsUsername = env('LMS_USERNAME');
     this.lmsPassword = env('LMS_PASSWORD');
     this.lmsBaseUrl = env('LMS_BASE_URL', 'https://lms-uat.plaza-network.com').replace(/\/$/, '');
+    this.amsBaseUrl = env('AMS_BASE_URL', 'https://ams-stg-api.allwaysvip.com').replace(/\/$/, '');
+    this.amsClientKey = env('AMS_CLIENT_KEY');
     this.headless = ['1', 'true', 'yes'].includes(env('HEADLESS', 'false').toLowerCase());
     this.screenshotOnFailure = ['1', 'true', 'yes'].includes(
       env('SCREENSHOT_ON_FAILURE', 'true').toLowerCase(),

@@ -45,6 +45,10 @@ When('I close the mini cart and add one more same pass to the shopping cart', as
       : [];
 
   this.passProducts = await passes(this).closeMiniCartAndAddAnotherPass(existingProducts);
+  const paidTotal = await passes(this).captureMiniCartPaidTotal();
+  if (paidTotal && this.passProducts[0]) {
+    this.passProducts[0].paidPrice = paidTotal;
+  }
 });
 
 Then('I verify Confirmation page should be displayed with the same product and price that the customer has paid and purchased', async function () {

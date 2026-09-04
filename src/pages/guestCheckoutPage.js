@@ -76,7 +76,6 @@ class GuestCheckoutPage extends BasePage {
   async fillMemberCheckoutMissingFields(data = {}) {
     await this.expectMemberFormPrefilled();
 
-    // mobile codegen: #CountryOfResidence '102', #phone
     await this.page.locator('#CountryOfResidence').selectOption(String(data.country || '102'));
     await this.page.locator('#phone').click();
     await this.page.locator('#phone').fill(String(data.phone || '7788994455'));
@@ -112,7 +111,6 @@ class GuestCheckoutPage extends BasePage {
     }
 
     await this.page.waitForLoadState('domcontentloaded', { timeout: 60_000 }).catch(() => {});
-    // After login, member checkout should be available (prefilled name, Confirm & Proceed).
     await expect(
       this.page
         .locator('#CountryOfResidence, #phone')
@@ -139,9 +137,12 @@ class GuestCheckoutPage extends BasePage {
     }
 
     const confirmOrPayment = this.page
-      .getByRole('button', { name: /Confirm & Proceed/i })
-      .or(this.page.getByRole('button', { name: 'Payment' }))
-      .or(this.page.getByRole('link', { name: /Confirm & Proceed/i }));
+      .locator('a.mobile-reserve-now-btn, a.btn.bookingBtn.mobile.mobile-reserve-now-btn')
+      .filter({ hasText: /Confirm\s*&\s*Proceed/i })
+      .or(this.page.getByRole('button', { name: /Confirm & Proceed/i }))
+      .or(this.page.getByRole('link', { name: /Confirm & Proceed/i }))
+      .or(this.page.locator('a, button').filter({ hasText: /Confirm\s*&\s*Proceed/i }))
+      .or(this.page.getByRole('button', { name: 'Payment' }));
 
     if (expectButton === 'payment') {
       await expect(
@@ -150,6 +151,10 @@ class GuestCheckoutPage extends BasePage {
       return;
     }
 
+    if (this.isMobile()) {
+      await expect(confirmOrPayment.first()).toBeAttached({ timeout: 30_000 });
+      return;
+    }
     await expect(confirmOrPayment.first()).toBeVisible({ timeout: 30_000 });
   }
 
@@ -243,8 +248,12 @@ class GuestCheckoutPage extends BasePage {
   }
 
   async clickConfirmAndProceed() {
-    // Never re-click consent labels here — toggles can uncheck required terms and empty Adyen.
     await this.acceptCheckoutRadiosAndTerms({ expectButton: 'confirm', clickLabels: false });
+    if (this.isMobile()) {
+      await this.dismissBlockingOverlays();
+      await this.#navigateToPayment(() => this.clickMobileConfirmAndProceed());
+      return;
+    }
     const confirmBtn = this.page
       .getByRole('button', { name: /Confirm & Proceed/i })
       .or(this.page.getByRole('link', { name: /Confirm & Proceed/i }))
@@ -254,8 +263,30 @@ class GuestCheckoutPage extends BasePage {
   }
 
   async #clickGuestPaymentButton() {
-    // Prefer the visible CTA (desktop: button.fullWidth.reserve-now-btn; mobile may use link/role).
+    if (this.isMobile()) {
+      await this.dismissBlockingOverlays();
+      await this.page
+        .evaluate(() => {
+          document
+            .querySelectorAll(
+              '#st_notification_modal, [id^="st_notification"], iframe.st_preview_frame_modal, iframe[id^="preview-notification-frame"], #smt-overlay',
+            )
+            .forEach((el) => el.remove());
+        })
+        .catch(() => {});
+      const agree = this.page
+        .locator('#tracking-consent-submit')
+        .or(this.page.getByRole('button', { name: /I agree/i }))
+        .first();
+      if (await agree.isVisible({ timeout: 1_500 }).catch(() => false)) {
+        await agree.click({ force: true }).catch(() => {});
+      }
+    }
+
     const candidates = [
+      ...(this.isMobile()
+        ? [this.mobileConfirmAndProceed(), this.page.locator('a.mobile-reserve-now-btn').first()]
+        : []),
       this.page.locator('button.fullWidth.reserve-now-btn').filter({ hasText: /^Payment$/i }).first(),
       this.page.getByRole('button', { name: /^Payment$/i }).first(),
       this.page.getByRole('link', { name: /^Payment$/i }).first(),
@@ -268,7 +299,11 @@ class GuestCheckoutPage extends BasePage {
     for (const btn of candidates) {
       if (await btn.isVisible({ timeout: 2_000 }).catch(() => false)) {
         await btn.scrollIntoViewIfNeeded().catch(() => {});
-        await btn.click();
+        if (this.isMobile()) {
+          await btn.evaluate((el) => el.click());
+        } else {
+          await btn.click();
+        }
         return;
       }
     }
