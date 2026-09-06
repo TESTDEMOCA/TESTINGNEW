@@ -29,6 +29,9 @@ When('I click Reserve Now on the lounge booking form', async function () {
 
 When('I click Check Out', async function () {
   const pageObj = booking(this);
+  if (this.selectedCurrency) {
+    await pageObj.assertMiniCartCurrency(this.selectedCurrency);
+  }
   await captureAndSetLmsGate(this, pageObj, 'cart before Check Out');
   await pageObj.clickCheckOut();
 });

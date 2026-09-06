@@ -398,15 +398,32 @@ class LmsPage extends BasePage {
     await expect(outletToggle).toBeVisible({ timeout: 30_000 });
     await outletToggle.scrollIntoViewIfNeeded().catch(() => {});
 
+    const navItem = this.page
+      .locator('li.nav-item.dropdown')
+      .filter({ has: this.page.locator('span.nav-link-inner--text', { hasText: /Outlet/i }) })
+      .first();
+    await navItem.hover({ force: true, timeout: 10_000 });
+
     const menu = this.page.locator('.dropdown-menu.outlet-dropdown-menu').first();
     const search = this.#outletSearchInput(menu);
-    if (!(await search.isVisible({ timeout: 800 }).catch(() => false))) {
-      await outletToggle.click({ force: true });
+    if (!(await search.isVisible({ timeout: 2_000 }).catch(() => false))) {
+      await navItem.hover({ force: true, timeout: 5_000 });
+      await this.page.waitForTimeout(300);
     }
-    if (!(await search.isVisible({ timeout: 3_000 }).catch(() => false))) {
-      await outletToggle.click({ force: true });
+    await this.page.evaluate(() => {
+      const menuEl = document.querySelector('.dropdown-menu.outlet-dropdown-menu');
+      const item = menuEl?.closest('li.nav-item.dropdown, .dropdown');
+      if (item) item.classList.add('show');
+      if (menuEl) {
+        menuEl.classList.add('show');
+        menuEl.style.setProperty('display', 'block', 'important');
+      }
+    }).catch(() => {});
+    if (!(await search.isVisible({ timeout: 2_000 }).catch(() => false))) {
+      await outletToggle.click({ force: true, timeout: 5_000 });
     }
     await expect(search).toBeVisible({ timeout: 15_000 });
+    console.log('[lms] Outlet dropdown search input visible after hover');
     return { outletToggle, menu };
   }
 
@@ -463,20 +480,15 @@ class LmsPage extends BasePage {
     if (!wanted) throw new Error('Outlet title is required');
 
     await expect(this.#outletToggle()).toBeVisible({ timeout: 30_000 });
-    const current = await this.#currentBookingsOutletLabel();
-    if (current === wanted) {
-      console.log(`[lms] Outlet already set: ${current}`);
-      return;
-    }
-
     const { menu } = await this.#openOutletMenu();
     const outletSearch = this.#outletSearchInput(menu);
     await expect(outletSearch).toBeVisible({ timeout: 15_000 });
-    await outletSearch.click();
+    await outletSearch.click({ force: true, timeout: 5_000 });
     await outletSearch.fill('');
-    await outletSearch.fill(wanted);
+    await outletSearch.fill(wanted, { timeout: 5_000 });
     await outletSearch.dispatchEvent('input');
-    console.log(`[lms] Searched outlet: ${wanted}`);
+    await expect(outletSearch).toHaveValue(wanted, { timeout: 5_000 });
+    console.log(`[lms] Pasted captured outlet: ${wanted}`);
 
     const item = menu
       .getByTitle(wanted, { exact: true })
@@ -484,11 +496,13 @@ class LmsPage extends BasePage {
       .first();
     await expect(item).toBeVisible({ timeout: 15_000 });
     await item.scrollIntoViewIfNeeded().catch(() => {});
-    await item.click();
+    await item.click({ force: true, timeout: 8_000 });
     console.log(`[lms] Selected outlet: ${wanted}`);
 
     await this.#waitForFetchingBookingsGone();
     await this.#dismissOverlays();
+    await this.page.keyboard.press('Escape').catch(() => {});
+    await expect(menu).toBeHidden({ timeout: 5_000 }).catch(() => {});
     await this.waitForBookingsTable();
     const after = await this.#currentBookingsOutletLabel();
     if (after !== wanted) {
@@ -560,21 +574,49 @@ class LmsPage extends BasePage {
     await this.waitForBookingsTable();
   }
 
-  async #selectSearchByBookingNumber() {
-    // Only the search-type caret next to #txtSearch — never nearby <a> (header Help).
-    const caret = this.page.locator('#txtSearch + button, #txtSearch + a.dropdown-toggle, .search-box .dropdown-toggle').first();
-    if (!(await caret.isVisible({ timeout: 1_500 }).catch(() => false))) return;
-    await caret.click({ force: true, timeout: 3_000 }).catch(() => {});
-    const option = this.page
-      .getByRole('option', { name: /Booking Number/i })
-      .or(this.page.locator('mat-option, button.dropdown-item, a.dropdown-item').filter({ hasText: /Booking Number/i }))
+  #bookingsSearchInput() {
+    return this.page
+      .locator('#txtSearch')
+      .or(this.page.getByPlaceholder('Search Bookings'))
       .first();
-    if (await option.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await option.click({ force: true, timeout: 3_000 });
-      console.log('[lms] Search-by set to Booking Number');
-    } else {
-      await this.page.keyboard.press('Escape').catch(() => {});
+  }
+
+  async #selectSearchByBookingNumber() {
+    const search = this.#bookingsSearchInput();
+    await expect(search).toBeVisible({ timeout: 15_000 });
+    const opened = await this.page
+      .evaluate(() => {
+        const input =
+          document.querySelector('#txtSearch') ||
+          document.querySelector('input[placeholder="Search Bookings"]');
+        if (!input) return false;
+        const root =
+          input.closest('.input-group, .search-box, .search, .form-group') || input.parentElement;
+        const caret = root?.querySelector(
+          'button.dropdown-toggle, a.dropdown-toggle, .dropdown-toggle, .fa-angle-down, .fa-caret-down, button',
+        );
+        if (!caret) return false;
+        caret.click();
+        return true;
+      })
+      .catch(() => false);
+    if (!opened) {
+      console.log('[lms] Search-by caret not found — continue with Enter');
+      return;
     }
+    const option = this.page
+      .locator(
+        '.dropdown-menu:not(.outlet-dropdown-menu) a.dropdown-item, .dropdown-menu:not(.outlet-dropdown-menu) button.dropdown-item, mat-option, [role="option"]',
+      )
+      .filter({ hasText: /Booking Number/i })
+      .first();
+    if (await option.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await option.click({ force: true, timeout: 3_000 }).catch(() => {});
+      console.log('[lms] Search-by set to Booking Number');
+      return;
+    }
+    await this.page.keyboard.press('Escape').catch(() => {});
+    console.log('[lms] Booking Number option not visible — continue with Enter');
   }
   async searchBookingId(orderNo) {
     const id = String(orderNo || '').trim();
@@ -583,42 +625,75 @@ class LmsPage extends BasePage {
     await this.ensureOnBookings();
     await this.#waitForFetchingBookingsGone();
     await this.#dismissOverlays();
+    await this.page.keyboard.press('Escape').catch(() => {});
     await this.#selectSearchByBookingNumber();
 
-    const search = this.page.locator('#txtSearch');
+    const search = this.#bookingsSearchInput();
     await expect(search).toBeVisible({ timeout: 30_000 });
-    await search.click({ force: true });
+    await search.click({ force: true, timeout: 5_000 });
     await search.fill('');
     await search.fill(id);
     await expect(search).toHaveValue(id, { timeout: 5_000 });
     await search.press('Enter');
-    const columnFilter = this.page
-      .locator(
-        'th.mat-column-bookingNumber input, th.cdk-column-bookingNumber input, .mat-column-bookingNumber input',
-      )
-      .first();
-    if (await columnFilter.isVisible({ timeout: 1_500 }).catch(() => false)) {
-      await columnFilter.click({ force: true });
-      await columnFilter.fill(id);
-      await columnFilter.press('Enter');
-    }
-    const searchBtn = this.page.locator('#txtSearch').locator('xpath=following-sibling::button[1]');
-    if (await searchBtn.isVisible({ timeout: 800 }).catch(() => false)) {
-      await searchBtn.click({ force: true, timeout: 3_000 }).catch(() => {});
-    }
+    await this.page.keyboard.press('Enter').catch(() => {});
     console.log(`[lms] Entered booking id and pressed Enter: ${id}`);
 
     await this.#waitForFetchingBookingsGone();
+    if (!(await this.#hasSingleBookingResult(id))) {
+      await search.click({ force: true, timeout: 3_000 });
+      await search.press('Enter');
+      await this.page.keyboard.press('Enter').catch(() => {});
+      console.log(`[lms] Pressed Enter again to filter booking: ${id}`);
+      await this.#waitForFetchingBookingsGone();
+    }
     await this.#dismissOverlays();
     return id;
   }
 
+  async #hasSingleBookingResult(orderNo) {
+    const id = String(orderNo || '').trim();
+    const pagerOne = this.page.getByText(/1\s*[-–]\s*1\s+of\s+1/i).first();
+    if (await pagerOne.isVisible().catch(() => false)) return true;
+    const rows = this.page.locator(
+      'table.mat-table tbody tr.mat-row, table[mat-table] tbody tr.mat-row, table.mat-table tbody tr[role="row"]',
+    );
+    const matches = this.page
+      .locator('td.mat-column-bookingNumber, td.cdk-column-bookingNumber')
+      .filter({ hasText: id });
+    const rowCount = await rows.count().catch(() => 0);
+    const matchCount = await matches.count().catch(() => 0);
+    return rowCount === 1 && matchCount === 1;
+  }
+
+  async #waitForSingleBookingResult(orderNo, timeout = 45_000) {
+    const id = String(orderNo || '').trim();
+    await expect
+      .poll(async () => ((await this.#hasSingleBookingResult(id)) ? 'one' : 'many'), {
+        timeout,
+        intervals: [1_000, 2_000, 3_000],
+      })
+      .toBe('one');
+    const cell = this.bookingNumberCell(id);
+    await expect(cell).toBeVisible({ timeout: 10_000 });
+    console.log(`[lms] Filtered to one booking row: ${id}`);
+    return cell;
+  }
+
   async searchAndValidateBooking(orderNo, timeout = 60_000) {
     const id = await this.searchBookingId(orderNo);
-    const cell = this.bookingNumberCell(id);
-    await expect(cell).toBeVisible({ timeout });
+    const cell = await this.#waitForSingleBookingResult(id, timeout);
     console.log(`[lms] Validated booking in LMS table: ${id}`);
     return cell;
+  }
+
+  async refreshBookingsThenSearch(orderNo, timeout = 60_000) {
+    await this.waitForBookingsTable();
+    console.log('[lms] Bookings loaded after outlet — refreshing before search');
+    await this.page.reload({ waitUntil: 'domcontentloaded' });
+    await this.#dismissOverlays();
+    await this.ensureOnBookings();
+    await this.#ensureAllBookingsView();
+    return this.searchAndValidateBooking(orderNo, timeout);
   }
 
   bookingNumberCell(orderNo) {

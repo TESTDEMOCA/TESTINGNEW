@@ -48,6 +48,14 @@ class BookNowPage extends BasePage {
       .or(this.page.locator('button').filter({ hasText: /Book Now\s*→/i }));
   }
 
+  #logBookNowNotAvailable(when) {
+    console.log(
+      when
+        ? `[book-now] Book Now not available — ${when}`
+        : '[book-now] Book Now not available',
+    );
+  }
+
   async hasBookNowOption(timeout = 20_000) {
     const checkOnce = () =>
       this.page.evaluate(() => {
@@ -460,6 +468,7 @@ class BookNowPage extends BasePage {
       console.log('[book-now] Book Now found — stop retries (current date @ 11:00)');
       return dest;
     }
+    this.#logBookNowNotAvailable('current date @ 11:00');
     await this.expectCurrencyMatchesDestination(dest.code, 12_000).catch((err) => {
       console.log(`[book-now] ${err.message} — retry search with next date/time`);
     });
@@ -490,7 +499,7 @@ class BookNowPage extends BasePage {
         console.log(`[book-now] Book Now found — stop retries (${attempt.label})`);
         return dest;
       }
-      console.log(`[book-now] No Book Now after ${attempt.label}`);
+      this.#logBookNowNotAvailable(attempt.label);
     }
 
     await expect(this.enabledBookNowCta().first()).toBeVisible({ timeout: 60_000 });
@@ -507,7 +516,7 @@ class BookNowPage extends BasePage {
       console.log('[book-now] Mobile lounge View listing available');
       return dest;
     }
-    // Retry next day once more if listing empty.
+    this.#logBookNowNotAvailable('mobile listing after next day @ 11:00');
     await this.ensureMobileBookingOpen().catch(() => {});
     await this.setBookNowNextDay();
     await this.setBookNowTime('1100');

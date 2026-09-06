@@ -156,6 +156,52 @@ class BasePage {
     );
   }
 
+  /**
+   * Mini-cart item price / Total must use the currency selected in Language (e.g. HKD not INR).
+   */
+  async assertMiniCartCurrency(expectedCurrency) {
+    const expected = String(expectedCurrency || '').trim().toUpperCase();
+    if (!expected) return;
+
+    await this.ensureMiniCartCheckOutVisible(30_000);
+
+    const totalEl = this.page
+      .locator('#minicart-bookingsummarysection .total-amt, .summary-content .total-amt, .total-amt')
+      .filter({ hasText: /[\d,.]+/ })
+      .first();
+    const cartEl = this.page
+      .locator('#minicart-bookingsummarysection, .summary-content')
+      .first();
+
+    let blob = '';
+    if (await totalEl.isVisible({ timeout: 8_000 }).catch(() => false)) {
+      blob = ((await totalEl.innerText()) || '').replace(/\s+/g, ' ').trim();
+    }
+    if (!blob && (await cartEl.isVisible({ timeout: 3_000 }).catch(() => false))) {
+      blob = ((await cartEl.innerText()) || '').replace(/\s+/g, ' ').trim();
+    }
+    if (!blob) {
+      throw new Error(`Mini-cart currency not found; expected ${expected}`);
+    }
+
+    const codes = [...blob.matchAll(/\b([A-Z]{3})\s*[\d,.]+/g)].map((m) => m[1].toUpperCase());
+    const symbolOk =
+      (expected === 'HKD' && /HK\$/i.test(blob)) ||
+      (expected === 'USD' && /US\$/i.test(blob)) ||
+      (expected === 'SGD' && /S\$/i.test(blob)) ||
+      (expected === 'MYR' && /\bRM\b/i.test(blob)) ||
+      (expected === 'INR' && /₹/.test(blob));
+    const ok = codes.includes(expected) || new RegExp(`\\b${expected}\\b`).test(blob) || symbolOk;
+    if (!ok) {
+      throw new Error(
+        `Mini-cart currency expected ${expected} after Language selection, got: ${
+          codes.length ? [...new Set(codes)].join(', ') : blob.slice(0, 180)
+        }`,
+      );
+    }
+    console.log(`[cart] Mini-cart currency OK: ${expected} (${blob.slice(0, 80)})`);
+  }
+
   async settle(ms = BasePage.AFTER_SELECT_SETTLE_MS) {
     await this.page.waitForTimeout(ms);
   }

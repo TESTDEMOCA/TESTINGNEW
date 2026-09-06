@@ -76,7 +76,7 @@ When('I open LMS Bookings', { timeout: 120_000 }, async function () {
   this.page = pageObj.page;
 });
 
-When('I select the captured LMS outlet', { timeout: 90_000 }, async function () {
+When('I select the captured LMS outlet', { timeout: 120_000 }, async function () {
   if (skipLms(this)) return;
   if (!this.lmsOutletName) {
     throw new Error('Capture the LMS outlet name before selecting it on Bookings');
@@ -114,15 +114,12 @@ Then(
     );
   }
   const pageObj = lms(this);
+  await pageObj.ensureSignedIn(this.settings.lmsUsername, this.settings.lmsPassword);
   if (this.lmsOutletName) {
-    await pageObj.ensureSignedIn(this.settings.lmsUsername, this.settings.lmsPassword);
     await pageObj.ensureOnBookings();
-    await pageObj.selectOutletByTitle(this.lmsOutletName);
   } else {
-    await pageObj.ensureSignedIn(this.settings.lmsUsername, this.settings.lmsPassword);
     await pageObj.openBookingsAndPrepare();
   }
-  await pageObj.searchBookingId(this.orderNo);
-  console.log(`[lms] Skipped booking-row verify after search: ${this.orderNo}`);
+  await pageObj.refreshBookingsThenSearch(this.orderNo, 60_000);
   this.page = pageObj.page;
 });

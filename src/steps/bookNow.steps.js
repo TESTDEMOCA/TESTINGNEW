@@ -149,6 +149,9 @@ When('I click Check Out on Book Now flow', async function () {
   if (this.bookNowLocationText) {
     await pageObj.assertMiniCartLocationMatches(this.bookNowLocationText);
   }
+  if (this.selectedCurrency) {
+    await pageObj.assertMiniCartCurrency(this.selectedCurrency);
+  }
   await captureAndSetLmsGate(this, pageObj, 'Book Now cart before Check Out');
 
   await pageObj.clickCheckOut();
