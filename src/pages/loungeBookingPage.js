@@ -115,9 +115,17 @@ class LoungeBookingPage extends BasePage {
     }
   }
 
+  #searchButton() {
+    return this.page
+      .getByRole('button', { name: /^Search$/i })
+      .or(this.page.getByRole('link', { name: /^Search$/i }))
+      .or(this.page.locator('a.btn, button.btn, button').filter({ hasText: /^Search$/i }))
+      .first();
+  }
+
   async clickSearch({ requireService = true } = {}) {
     if (this.isMobile()) return;
-    const search = this.page.getByRole('button', { name: 'Search' });
+    const search = this.#searchButton();
     await expect(search).toBeVisible({ timeout: 30_000 });
     await this.clickAfterDismissingOverlays(search, 15_000);
     if (!requireService) {
@@ -383,28 +391,39 @@ class LoungeBookingPage extends BasePage {
 
     for (let attempt = 1; attempt <= 3; attempt++) {
       await this.dismissBlockingOverlays();
-      await getPrice.evaluate((el) => {
-        el.classList.remove('hide', 'd-none');
-        el.removeAttribute('hidden');
-        el.click();
-      });
+      await getPrice.scrollIntoViewIfNeeded().catch(() => {});
+      const clicked = await getPrice
+        .evaluate((el) => {
+          el.classList.remove('hide', 'd-none');
+          el.removeAttribute('hidden');
+          el.style.setProperty('display', '', 'important');
+          el.style.setProperty('visibility', 'visible', 'important');
+          el.click();
+          return true;
+        })
+        .catch(() => false);
+      if (!clicked) {
+        await getPrice.click({ force: true, timeout: 8_000 }).catch(() => {});
+      }
+      console.log(`[booking] Get Price click attempt ${attempt}`);
       if (await reserve.isVisible({ timeout: attempt === 3 ? 45_000 : 20_000 }).catch(() => false)) {
+        console.log('[booking] Reserve Now visible after Get Price');
         return;
       }
     }
-    const reserveAttached = this.page
-      .locator('a.btn:has-text("Reserve Now"), button:has-text("Reserve Now"), a.reservenow')
-      .first();
-    if ((await reserveAttached.count()) > 0) {
-      return;
-    }
+    await expect(reserve).toBeVisible({ timeout: 15_000 });
   }
 
   async clickGetPriceLeavingDefaults() {
     await this.expectFormVisible();
     await this.dismissBlockingOverlays();
     if (!this.isMobile()) {
-      await this.clickSearch({ requireService: false });
+      const search = this.#searchButton();
+      if (await search.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await this.clickSearch({ requireService: false });
+      } else {
+        console.log('[booking] Search not shown — Get Price with page defaults');
+      }
     }
     await this.#clickGetPriceButton();
   }
@@ -434,9 +453,9 @@ class LoungeBookingPage extends BasePage {
     await confirm.first().click();
     await expect(modal).toBeHidden({ timeout: 30_000 });
     await this.settle(1_000);
-    await expect(this.page.getByRole('button', { name: 'Check Out' })).toBeVisible({
-      timeout: 60_000,
-    });
+    await this.dismissBlockingOverlays();
+    await this.ensureMiniCartCheckOutVisible(60_000);
+    console.log('[booking] Shower 30 mins added — Check Out visible');
   }
 
   async #revealMobileCartAddons() {
@@ -619,26 +638,43 @@ class LoungeBookingPage extends BasePage {
     }
 
     const reserve = this.page
-      .getByRole('button', { name: 'Reserve Now' })
-      .or(this.page.getByRole('link', { name: /Reserve Now/i }))
-      .or(this.page.locator('a.btn:has-text("Reserve Now"), button:has-text("Reserve Now")'))
+      .locator('a.btn:has-text("Reserve Now"):not(.hide), button:has-text("Reserve Now"):not(.hide)')
+      .or(this.page.getByRole('button', { name: /Reserve Now/i }).filter({ visible: true }))
+      .or(this.page.getByRole('link', { name: /Reserve Now/i }).filter({ visible: true }))
       .first();
-    await expect(reserve).toBeAttached({ timeout: 90_000 });
-    await this.waitBeforeTransition();
-    await reserve.evaluate((el) => {
-      el.classList.remove('hide', 'd-none');
-      el.click();
-    }).catch(async () => {
-      await reserve.click({ force: true });
-    });
-
     const afterReserve = this.page
       .getByRole('button', { name: /^Upgrade$/i })
       .or(this.page.getByRole('link', { name: /^Upgrade$/i }))
-      .or(this.page.getByRole('button', { name: 'Check Out' }))
       .or(this.miniCartCheckOutButton())
+      .or(this.page.getByRole('button', { name: /^Check Out$/i }))
       .first();
-    await expect(afterReserve).toBeVisible({ timeout: 90_000 });
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await this.dismissBlockingOverlays();
+      await expect(reserve).toBeVisible({ timeout: attempt === 1 ? 90_000 : 20_000 });
+      await this.waitBeforeTransition();
+      await reserve.scrollIntoViewIfNeeded().catch(() => {});
+      await this.dismissBlockingOverlays();
+      try {
+        await reserve.click({ timeout: 8_000 });
+      } catch {
+        await this.dismissBlockingOverlays();
+        await reserve.click({ force: true, timeout: 8_000 });
+      }
+      console.log(`[booking] Reserve Now click attempt ${attempt}`);
+      if (await afterReserve.isVisible({ timeout: attempt === 3 ? 25_000 : 12_000 }).catch(() => false)) {
+        console.log('[booking] Reserve Now clicked — cart/upgrade ready');
+        return;
+      }
+      try {
+        await this.ensureMiniCartCheckOutVisible(8_000);
+        console.log('[booking] Reserve Now clicked — opened mini-cart Check Out');
+        return;
+      } catch {
+        /* retry Reserve Now */
+      }
+    }
+    await expect(afterReserve).toBeVisible({ timeout: 15_000 });
   }
 
   async clickCheckOut() {

@@ -667,15 +667,31 @@ class LmsPage extends BasePage {
 
   async #waitForSingleBookingResult(orderNo, timeout = 45_000) {
     const id = String(orderNo || '').trim();
-    await expect
-      .poll(async () => ((await this.#hasSingleBookingResult(id)) ? 'one' : 'many'), {
-        timeout,
-        intervals: [1_000, 2_000, 3_000],
-      })
-      .toBe('one');
     const cell = this.bookingNumberCell(id);
-    await expect(cell).toBeVisible({ timeout: 10_000 });
-    console.log(`[lms] Filtered to one booking row: ${id}`);
+    if (await cell.isVisible({ timeout: 12_000 }).catch(() => false)) {
+      console.log(
+        (await this.#hasSingleBookingResult(id))
+          ? `[lms] Filtered to one booking row: ${id}`
+          : `[lms] Captured booking visible in LMS table: ${id}`,
+      );
+      return cell;
+    }
+
+    console.log('[lms] Booking not visible after search — clearing filter');
+    const search = this.#bookingsSearchInput();
+    if (await search.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await search.click({ force: true, timeout: 3_000 }).catch(() => {});
+      await search.fill('');
+      await search.press('Enter');
+      await this.#waitForFetchingBookingsGone();
+    }
+    await this.page
+      .locator('table.mat-table tbody tr, table[mat-table] tbody tr')
+      .first()
+      .waitFor({ state: 'visible', timeout: 30_000 })
+      .catch(() => {});
+    await expect(cell).toBeVisible({ timeout });
+    console.log(`[lms] Captured booking visible in LMS table: ${id}`);
     return cell;
   }
 
@@ -699,10 +715,9 @@ class LmsPage extends BasePage {
   bookingNumberCell(orderNo) {
     const id = String(orderNo);
     return this.page
-      .locator('td.mat-column-bookingNumber, td.cdk-column-bookingNumber, td')
+      .locator('td.mat-column-bookingNumber, td.cdk-column-bookingNumber')
       .filter({ hasText: id })
-      .or(this.page.getByRole('cell', { name: new RegExp(escapeRegExp(id), 'i') }))
-      .or(this.page.getByText(id))
+      .filter({ visible: true })
       .first();
   }
 

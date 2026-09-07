@@ -443,10 +443,7 @@ class BookNowPage extends BasePage {
 
   /** Mobile listing uses View CTAs instead of desktop Book Now→. */
   async hasMobileLoungeViewOption(timeout = 20_000) {
-    const view = this.page.getByRole('link', { name: /^View$/i }).or(
-      this.page.locator('a.loungedirect, a.btn.loungedirect').filter({ hasText: /^View$/i }),
-    );
-    return view.first().isVisible({ timeout }).catch(() => false);
+    return this.#loungeViewLinks().first().isVisible({ timeout }).catch(() => false);
   }
 
   async searchUntilBookNowAvailable(destinationInput = 'HKG') {
@@ -700,18 +697,29 @@ class BookNowPage extends BasePage {
     return { locationText: actual };
   }
 
+  #loungeViewLinks() {
+    return this.page.locator('a, button').filter({ hasText: /^\s*View\s*$/i }).filter({ visible: true });
+  }
+
+  async #waitForLoungeListing(timeout = 45_000) {
+    const heading = this.page.getByText(/Hong Kong International Airport\s*\(HKG\)/i).first();
+    const views = this.#loungeViewLinks();
+    const deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+      if (await views.first().isVisible({ timeout: 400 }).catch(() => false)) return 'views';
+      if (await heading.isVisible({ timeout: 400 }).catch(() => false)) return 'heading';
+      await this.page.waitForTimeout(400);
+    }
+    return null;
+  }
+
   async clickMoreAtAirport(destinationInput = 'HKG') {
+    await this.dismissBlockingOverlays();
     if (this.isMobile() && (await this.hasMobileLoungeViewOption(5_000))) {
       console.log('[book-now] Mobile already on lounge listing — skip More at airport');
       return;
     }
-    const listingOpen = await this.page
-      .getByRole('link', { name: /^View$/i })
-      .or(this.page.locator('a.loungedirect, a.btn.loungedirect').filter({ hasText: /^View$/i }))
-      .first()
-      .isVisible({ timeout: 2_000 })
-      .catch(() => false);
-    if (listingOpen) {
+    if (await this.#waitForLoungeListing(2_000)) {
       console.log('[book-now] Lounge listing already open — skip More at airport');
       return;
     }
@@ -719,18 +727,19 @@ class BookNowPage extends BasePage {
     const more = this.page
       .getByRole('button', { name: dest.moreAt })
       .or(this.page.getByRole('link', { name: dest.moreAt }))
-      .or(this.viewAllPropertiesButton(dest.code))
+      .or(this.page.getByRole('button', { name: dest.viewAllProperties }))
       .or(this.page.locator('#booking-widget-more-properties-btn'));
+
+    await this.dismissBlockingOverlays();
     await expect(more.first()).toBeVisible({ timeout: 90_000 });
     await this.waitBeforeTransition();
-    await more.first().click();
-    await this.page
-      .getByRole('link', { name: /^View$/i })
-      .or(this.page.locator('a.loungedirect, a.btn.loungedirect').filter({ hasText: /^View$/i }))
-      .first()
-      .waitFor({ state: 'visible', timeout: 60_000 })
-      .catch(() => {});
-    console.log('[book-now] More at airport listing opened');
+    await this.clickAfterDismissingOverlays(more.first(), 15_000);
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 30_000 }).catch(() => {});
+    const opened = await this.#waitForLoungeListing(45_000);
+    if (!opened) {
+      throw new Error('More at HKG did not open the lounge listing (no View CTAs)');
+    }
+    console.log(`[book-now] More at airport listing opened (${opened})`);
   }
 
   async clickMoreAtHkg() {
@@ -785,10 +794,13 @@ class BookNowPage extends BasePage {
   }
 
   async openLoungeView(nth = 4) {
+    await this.dismissBlockingOverlays();
     await this.waitBeforeTransition();
-    const views = this.page
-      .getByRole('link', { name: /^View$/i })
-      .or(this.page.locator('a.loungedirect, a.btn.loungedirect').filter({ hasText: /^View$/i }));
+    const views = this.#loungeViewLinks();
+    if (!(await views.first().isVisible({ timeout: 8_000 }).catch(() => false))) {
+      console.log('[book-now] View links missing — reopen More at airport listing');
+      await this.clickMoreAtAirport(this.activeDestination?.code || 'HKG');
+    }
     await expect(views.first()).toBeVisible({ timeout: 60_000 });
     const count = await views.count();
     if (!count) {
@@ -797,6 +809,8 @@ class BookNowPage extends BasePage {
     // Desktop listing is dense; mobile often has fewer cards — clamp to last available.
     const index = Math.min(Number(nth) || 0, count - 1);
     console.log(`[book-now] Opening lounge View index ${index} (requested ${nth}, available ${count})`);
+    await views.nth(index).scrollIntoViewIfNeeded().catch(() => {});
+    await this.dismissBlockingOverlays();
     await views.nth(index).click();
     await this.page.waitForLoadState('domcontentloaded', { timeout: 60_000 }).catch(() => {});
 

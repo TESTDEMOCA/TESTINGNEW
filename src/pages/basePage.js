@@ -224,6 +224,15 @@ class BasePage {
   }
 
   async dismissBlockingOverlays() {
+    const agree = this.page
+      .getByRole('button', { name: /^I AGREE$/i })
+      .or(this.page.getByRole('link', { name: /^I AGREE$/i }))
+      .or(this.page.locator('button, a.btn').filter({ hasText: /^I AGREE$/i }))
+      .first();
+    if (await agree.isVisible({ timeout: 800 }).catch(() => false)) {
+      await agree.click({ force: true, timeout: 5_000 }).catch(() => {});
+      console.log('[overlay] Accepted cookie banner (I AGREE)');
+    }
     await clickSalesManagoClose(this.page);
     await this.page.keyboard.press('Escape').catch(() => {});
     const closeIframe = this.page.locator('iframe[title="Close message"]').first();

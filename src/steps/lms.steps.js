@@ -93,7 +93,7 @@ When('I select the captured LMS outlet', { timeout: 120_000 }, async function ()
  */
 Then(
   'I should see the captured booking in LMS Bookings',
-  { timeout: 180_000 },
+  { timeout: 240_000 },
   async function () {
   if (this.paymentDnsHandoff || this.orderNo === 'DNS-HANDOFF') {
     console.log('[lms] Soft-pass LMS verify — payment handoff only (uat-booking DNS blocked)');

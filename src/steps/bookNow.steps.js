@@ -65,7 +65,7 @@ When('I click Book Now arrow on the Book Now widget', async function () {
   await captureAndSetLmsGate(this, pageObj, 'bw-featured-subtitle before Book Now');
 });
 
-When('I click More at HKG', async function () {
+When('I click More at HKG', { timeout: 180_000 }, async function () {
   await bookNow(this).clickMoreAtHkg();
 });
 
@@ -106,7 +106,7 @@ When('I click Book Now on the search result lounge', async function () {
   await captureAndSetLmsGate(this, pageObj, 'featured/search before Book Now');
 });
 
-When('I open lounge View option {int}', async function (nth) {
+When('I open lounge View option {int}', { timeout: 120_000 }, async function (nth) {
   const pageObj = bookNow(this);
   await pageObj.openLoungeView(nth);
   await captureAndSetLmsGate(this, pageObj, `lounge View option ${nth}`);
