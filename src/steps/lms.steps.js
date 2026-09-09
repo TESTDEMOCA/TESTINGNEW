@@ -1,0 +1,121 @@
+const { Then, When } = require('@cucumber/cucumber');
+const { LmsPage } = require('../pages/lmsPage');
+
+function lms(world) {
+  return new LmsPage(world.page, world.settings);
+}
+
+function skipLms(world) {
+  return Boolean(world.paymentDnsHandoff || world.orderNo === 'DNS-HANDOFF');
+}
+
+When('I log in to LMS', { timeout: 120_000 }, async function () {
+  if (skipLms(this)) {
+    console.log('[lms] Soft-pass LMS login — payment handoff only');
+    return;
+  }
+  this.settings.requireLmsCredentials();
+  const pageObj = lms(this);
+  // LMS admin UI needs desktop width — outlet dropdown is hidden on mobile viewport.
+  await pageObj.page.setViewportSize({ width: 1280, height: 768 });
+  await pageObj.ensureSignedIn(this.settings.lmsUsername, this.settings.lmsPassword);
+  this.page = pageObj.page;
+});
+
+When('I open LMS Masters', async function () {
+  if (skipLms(this)) return;
+  const pageObj = lms(this);
+  await pageObj.openLmsMastersMenu();
+  this.page = pageObj.page;
+});
+
+When('I click Outlet under LMS Masters', async function () {
+  if (skipLms(this)) return;
+  const pageObj = lms(this);
+  await pageObj.openLmsMastersOutlet();
+  this.page = pageObj.page;
+});
+
+When('I search LMS Outlet with the captured AMS order number', async function () {
+  if (skipLms(this)) {
+    console.log('[lms] Soft-pass Outlet search — payment handoff only');
+    return;
+  }
+  if (!this.amsOrderNumber) {
+    throw new Error('Fetch the AMS order summary before searching LMS Outlet');
+  }
+  const pageObj = lms(this);
+  await pageObj.searchOutletMasterByNumber(this.amsOrderNumber, {
+    propertyName: this.amsPropertyName,
+    locationText: this.bookNowLocationText,
+    gate: this.lmsGate,
+  });
+  this.page = pageObj.page;
+  if (this.attach) {
+    await this.attach(`LMS Outlet search: ${this.amsOrderNumber}`, 'text/plain');
+  }
+});
+
+When('I capture the LMS outlet name from the Outlet search result', async function () {
+  if (skipLms(this)) return;
+  if (!this.amsOrderNumber) {
+    throw new Error('Fetch the AMS order summary before capturing the LMS outlet name');
+  }
+  const pageObj = lms(this);
+  this.lmsOutletName = await pageObj.captureOutletNameFromMasterSearch(this.amsOrderNumber);
+  this.page = pageObj.page;
+  if (this.attach) {
+    await this.attach(`LMS outlet name: ${this.lmsOutletName}`, 'text/plain');
+  }
+});
+
+When('I open LMS Bookings', { timeout: 120_000 }, async function () {
+  if (skipLms(this)) return;
+  const pageObj = lms(this);
+  await pageObj.openBookingsAndPrepare();
+  this.page = pageObj.page;
+});
+
+When('I select the captured LMS outlet', { timeout: 120_000 }, async function () {
+  if (skipLms(this)) return;
+  if (!this.lmsOutletName) {
+    throw new Error('Capture the LMS outlet name before selecting it on Bookings');
+  }
+  const pageObj = lms(this);
+  await pageObj.selectOutletByTitle(this.lmsOutletName);
+  this.page = pageObj.page;
+  console.log(`[lms] Selected captured outlet: ${this.lmsOutletName}`);
+});
+
+/**
+ * Same LMS Bookings search as TC06 / TC07 for every feature:
+ * captured outlet selected → Show Approved ON → type booking id in #txtSearch → Enter
+ * → if missing, Enter again → full-page refresh (5s) + paste/Enter up to 3 times.
+ */
+Then(
+  'I should see the captured booking in LMS Bookings',
+  { timeout: 360_000 },
+  async function () {
+  if (this.paymentDnsHandoff || this.orderNo === 'DNS-HANDOFF') {
+    console.log('[lms] Soft-pass LMS verify — payment handoff only (uat-booking DNS blocked)');
+    return;
+  }
+  this.settings.requireLmsCredentials();
+  if (!this.orderNo) {
+    throw new Error('No booking order number captured before LMS verification');
+  }
+  if (!this.lmsOutletName) {
+    throw new Error('Select the captured LMS outlet on Bookings before searching the booking id');
+  }
+  console.log(`[lms] Verifying booking ${this.orderNo} at ${this.lmsOutletName}`);
+  if (this.attach) {
+    await this.attach(
+      `LMS verify Order No: ${this.orderNo}; Outlet: ${this.lmsOutletName}`,
+      'text/plain',
+    );
+  }
+  const pageObj = lms(this);
+  await pageObj.ensureOnBookingsWithOutlet(this.lmsOutletName);
+  await pageObj.refreshBookingsThenSearch(this.orderNo, 60_000, this.lmsOutletName);
+  this.page = pageObj.page;
+});

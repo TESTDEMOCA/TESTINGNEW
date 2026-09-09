@@ -1,0 +1,38 @@
+stages:
+  - test
+
+variables:
+  HEADLESS: "true"
+  SCREENSHOT_ON_FAILURE: "true"
+  JIRA_ATTACH_HTML_REPORT: "true"
+
+xray_automation:
+  stage: test
+  image: mcr.microsoft.com/playwright:v1.59.1-noble
+
+  before_script:
+    - npm ci
+    - apt-get update
+    - apt-get install -y unzip
+
+  script:
+    - test -n "$XRAY_TEST_EXECUTION_KEY" || (echo "XRAY_TEST_EXECUTION_KEY is required" && exit 1)
+    - npm run xray:export
+    - echo "Generated Xray Feature(s)"
+    - find features/xray-generated -name "*.feature"
+    - npm run test:from-xray
+    - npm run report:xray-json
+
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths:
+      - reports/
+      - features/xray-generated/
+      - playwright-report/
+      - test-results/
+
+  rules:
+    - if: '$XRAY_TEST_EXECUTION_KEY'
+      when: on_success
+    - when: never
