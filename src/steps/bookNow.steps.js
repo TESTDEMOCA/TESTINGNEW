@@ -147,13 +147,14 @@ When('I click Check Out on Book Now flow', async function () {
 
   if (pageObj.isMobile()) {
     console.log('[checkout] Mobile Check Out: Confirm & Proceed (lounge) or mini-cart Check Out (passes)');
-  } else {
-    if (this.bookNowLocationText) {
-      await pageObj.assertMiniCartLocationMatches(this.bookNowLocationText);
-    }
-    if (this.selectedCurrency) {
-      await pageObj.assertMiniCartCurrency(this.selectedCurrency);
-    }
+  } else if (this.bookNowLocationText) {
+    await pageObj.assertMiniCartLocationMatches(this.bookNowLocationText);
+  }
+  const isPassFlow = Boolean(
+    this.smartTravellerPassFlow || this.passProduct || (this.passProducts && this.passProducts.length),
+  );
+  if (isPassFlow || this.selectedCurrency) {
+    await pageObj.assertMiniCartCurrency(this.selectedCurrency);
   }
   await captureAndSetLmsGate(this, pageObj, 'Book Now cart before Check Out');
 

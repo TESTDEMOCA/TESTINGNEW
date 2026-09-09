@@ -230,7 +230,7 @@ When('I log in with the newly registered credentials', async function () {
   // Exclusive → login cart recovery only for Smart Traveller member-only pass flows (TC03_pass).
   const passesPage = new PassesPage(this.page, this.settings);
   if (this.smartTravellerPassFlow) {
-    const paidTotal = await passesPage.ensureCheckOutAfterExclusiveLogin();
+    const paidTotal = await passesPage.ensureCheckOutAfterExclusiveLogin(this.selectedCurrency);
     // Keep tile price as passProduct.price; store cart total separately for paid-amount checks.
     if (paidTotal) {
       if (this.passProduct) this.passProduct.paidPrice = paidTotal;
@@ -242,6 +242,9 @@ When('I log in with the newly registered credentials', async function () {
       );
     }
   } else if (Array.isArray(this.passProducts) && this.passProducts.length) {
+    if (this.selectedCurrency) {
+      await passesPage.assertMiniCartCurrency(this.selectedCurrency);
+    }
     const paidTotal = await passesPage.captureMiniCartPaidTotal();
     if (paidTotal && this.passProducts[0]) {
       this.passProducts[0].paidPrice = paidTotal;

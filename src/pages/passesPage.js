@@ -159,13 +159,13 @@ class PassesPage extends BasePage {
    * "Exclusive to Smart Traveller Only" (typically opens the login modal).
    * Price/name are always taken from the same tile as the clicked Exclusive button.
    */
-  async selectMemberOnlyPass() {
+  async selectMemberOnlyPass(expectedCurrency) {
     await this.waitBeforeTransition();
 
     await expect(this.#smartTravellerBadgeImg().first()).toBeVisible({ timeout: 60_000 });
     const exclusiveBtn = this.#exclusiveSmartTravellerButtonIn().first();
     if (!(await exclusiveBtn.isVisible({ timeout: 8_000 }).catch(() => false))) {
-      return this.#addLoggedInSmartTravellerPass();
+      return this.#addLoggedInSmartTravellerPass(expectedCurrency);
     }
     await exclusiveBtn.scrollIntoViewIfNeeded().catch(() => {});
 
@@ -195,6 +195,7 @@ class PassesPage extends BasePage {
     console.log(
       `[passes] Captured from clicked Exclusive tile — name: "${details.name}", price: "${details.price}"`,
     );
+    await this.assertSelectedCurrency(expectedCurrency, details.price, { cart: false });
 
     const btnInCard = this.#exclusiveSmartTravellerButtonIn(card).first();
     await expect(btnInCard).toBeVisible({ timeout: 15_000 });
@@ -207,7 +208,7 @@ class PassesPage extends BasePage {
   /**
    * Already logged-in Smart Traveller: Exclusive CTA is replaced by Add on the same tile.
    */
-  async #addLoggedInSmartTravellerPass() {
+  async #addLoggedInSmartTravellerPass(expectedCurrency) {
     const card = this.page
       .locator('.col, article, .card, .pass-card, li, section, [class*="pass"]')
       .filter({ has: this.#smartTravellerBadgeImg() })
@@ -218,6 +219,7 @@ class PassesPage extends BasePage {
     if (!details.price) {
       throw new Error('Could not capture price from the logged-in Smart Traveller pass tile.');
     }
+    await this.assertSelectedCurrency(expectedCurrency, details.price, { cart: false });
     const addBtn = card
       .getByRole('button', { name: /^(Add|Add to cart|Add to bag)$/i })
       .or(card.locator('button, a').filter({ hasText: /^(Add|Add to cart|Add to bag)$/i }))
@@ -228,6 +230,7 @@ class PassesPage extends BasePage {
     console.log(
       `[passes] Logged-in Smart Traveller pass added — name: "${details.name}", price: "${details.price}"`,
     );
+    await this.assertSelectedCurrency(expectedCurrency, null, { cart: true });
     return details;
   }
 
@@ -236,14 +239,14 @@ class PassesPage extends BasePage {
    * If cart is empty, re-click Exclusive while already logged in.
    * Also capture the mini-cart paid total (listing tile price can differ from amount paid).
    */
-  async ensureCheckOutAfterExclusiveLogin() {
+  async ensureCheckOutAfterExclusiveLogin(expectedCurrency) {
     try {
       await this.ensureMiniCartCheckOutVisible(20_000);
     } catch {
       console.log(
         '[passes] Check Out not visible after login — re-clicking Smart Traveller exclusive while logged in',
       );
-      await this.selectMemberOnlyPass();
+      await this.selectMemberOnlyPass(expectedCurrency);
 
       const loginModal = this.page.locator('#userLogin .modal-content, #userLogin.show').first();
       if (await loginModal.isVisible({ timeout: 3_000 }).catch(() => false)) {
@@ -255,6 +258,7 @@ class PassesPage extends BasePage {
       await this.ensureMiniCartCheckOutVisible(45_000);
     }
 
+    await this.assertSelectedCurrency(expectedCurrency, null, { cart: true });
     return this.captureMiniCartPaidTotal();
   }
 
@@ -424,7 +428,7 @@ class PassesPage extends BasePage {
     };
   }
 
-  async addFirstPassToCart() {
+  async addFirstPassToCart(expectedCurrency) {
     await this.waitBeforeTransition();
     const addBtn = this.#addToCartButton();
     await expect(addBtn).toBeVisible({ timeout: 60_000 });
@@ -432,6 +436,7 @@ class PassesPage extends BasePage {
     // Capture details before clicking so we can verify on confirmation page
     const details = await this.captureFirstPassDetails();
     console.log(`[passes] Adding pass — name: "${details.name}", price: "${details.price}"`);
+    await this.assertSelectedCurrency(expectedCurrency, details.price, { cart: false });
 
     await addBtn.click();
 
@@ -443,10 +448,11 @@ class PassesPage extends BasePage {
     ).toBeVisible({ timeout: 60_000 });
 
     console.log('[passes] Pass added to cart — Check Out is visible');
+    await this.assertSelectedCurrency(expectedCurrency, null, { cart: true });
     return details;
   }
 
-  async closeMiniCartAndAddAnotherPass(existingProducts = []) {
+  async closeMiniCartAndAddAnotherPass(existingProducts = [], expectedCurrency) {
     await this.#dismissBlockingNotice();
 
     const checkOutButton = this.miniCartCheckOutButton();
@@ -520,6 +526,7 @@ class PassesPage extends BasePage {
       await this.waitBeforeTransition();
     }
 
+    await this.assertSelectedCurrency(expectedCurrency, secondPass.price, { cart: true });
     return [...existingProducts, secondPass];
   }
 
@@ -540,6 +547,28 @@ class PassesPage extends BasePage {
     console.log('[passes] "Pass Confirmed" heading verified');
 
     const pageText = await this.page.evaluate(() => document.body.innerText || '');
+    const expectedCurrency = String(expected.expectedCurrency || '').trim().toUpperCase();
+    if (expectedCurrency) {
+      const totalPaidLine = (pageText.match(/Total\s*Paid[^\n]{0,80}/i) || [])[0] || '';
+      const confirmationCode = this.currencyCodeFromText(totalPaidLine);
+      if (confirmationCode && confirmationCode !== expectedCurrency) {
+        throw new Error(
+          `Confirmation currency expected ${expectedCurrency} after Language selection, got: ${confirmationCode}`,
+        );
+      }
+      for (const product of products) {
+        if (product?.price) {
+          await this.assertSelectedCurrency(expectedCurrency, product.price, { cart: false });
+        }
+        const paidCode = this.currencyCodeFromText(product?.paidPrice);
+        if (paidCode && paidCode !== expectedCurrency) {
+          throw new Error(
+            `Paid total currency expected ${expectedCurrency} after Language selection, got: ${paidCode}`,
+          );
+        }
+      }
+      console.log(`[passes] Confirmation currency OK: ${expectedCurrency}`);
+    }
 
     if (orderNo) {
       // Order No may be in DOM but CSS-hidden / off-screen; assert attached + page text.

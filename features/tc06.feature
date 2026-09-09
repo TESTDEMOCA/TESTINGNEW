@@ -12,6 +12,7 @@ Feature: TC06 Gate 35 More at HKG upgrade to PPF guest checkout
     And I open Plaza Premium Lounge View for Gate "35"
     And I click Get Price leaving Services defaults
     And I click Reserve Now on the lounge booking form
+    And I click Upgrade and expect PPF in the cart
     And I click Check Out on Book Now flow
     And I complete guest checkout for TC03
     And I click Payment for Book Now guest flow

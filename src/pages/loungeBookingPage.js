@@ -446,14 +446,9 @@ class LoungeBookingPage extends BasePage {
     await expect(reserve).toBeVisible({ timeout: 15_000 });
   }
 
-  /** Cart Add for Shower 30 mins — div.service-CTA a.add-service-btn.add-addon. */
+  /** Cart Add for Shower 30 mins. */
   showerThirtyMinsAddButton() {
-    return this.page
-      .locator(
-        'div.service-CTA a.add-service-btn.add-addon[data-servicename="Shower - 30 mins"][data-bs-target="#add-service-form-0"]',
-      )
-      .filter({ hasText: /^Add$/i })
-      .first();
+    return this.page.locator('//a[@data-servicename="Shower - 30 mins"]').first();
   }
 
   async addShowerThirtyMinsAddon() {
@@ -601,72 +596,159 @@ class LoungeBookingPage extends BasePage {
     ).toBeVisible({ timeout: 60_000 });
   }
 
+  /** Cart Upgrade CTA — Lounge Use - 3 Hours → PPF (`a.upgradetothis`). */
+  upgradeToPpfButton() {
+    return this.page
+      .locator(
+        'a.btn.btn-primary.upgradetothis[data-bs-target="#upgradepopout-0"], a.upgradetothis[data-bs-target="#upgradepopout-0"], a.upgradetothis',
+      )
+      .filter({ hasText: /Upgrade/i })
+      .first();
+  }
+
+  async #revealUpgradeCta() {
+    await this.page
+      .evaluate(() => {
+        const root = document.querySelector('#mobileVisit.show') || document;
+        root.querySelectorAll('.collapse').forEach((el) => {
+          el.classList.add('show');
+          el.style.display = 'block';
+        });
+        root.querySelectorAll('a.upgradetothis').forEach((el) => {
+          el.classList.remove('hide', 'd-none');
+          el.removeAttribute('hidden');
+          el.style.setProperty('display', '', 'important');
+          el.style.setProperty('visibility', 'visible', 'important');
+        });
+      })
+      .catch(() => {});
+  }
+
   async clickUpgradeAndExpectPpf() {
-    const cartModal = this.page.locator('#cartmodal.show, #cartmodal').filter({ visible: true }).first();
-    const closeCart = async () => {
-      if (!(await cartModal.isVisible({ timeout: 800 }).catch(() => false))) return;
-      await this.page.keyboard.press('Escape').catch(() => {});
-      const cartClose = this.page
-        .locator(
-          '#cartmodal .btn-close, #cartmodal [data-bs-dismiss="modal"], #cartmodal button.close, #cartmodal [aria-label="Close"]',
-        )
-        .filter({ visible: true })
-        .first();
-      if (await cartClose.isVisible({ timeout: 2_000 }).catch(() => false)) {
-        await cartClose.click({ force: true }).catch(() => {});
-      }
-      await cartModal.waitFor({ state: 'hidden', timeout: 8_000 }).catch(() => {});
+    await this.dismissBlockingOverlays();
+
+    const summaryReady = this.bookingSummaryCheckOutButton()
+      .or(this.mobileConfirmAndProceed())
+      .or(this.page.getByRole('button', { name: /^Check Out$/i }))
+      .or(this.page.locator('#bookingsummarysection, #minicart-bookingsummarysection, .summary-content'))
+      .first();
+    await expect(summaryReady).toBeVisible({ timeout: 30_000 }).catch(() => {});
+
+    if (this.isMobile()) {
+      await this.#revealMobileCartAddons();
+    }
+    await this.#revealUpgradeCta();
+
+    const normalizeAmount = (raw) => {
+      const blob = String(raw || '').replace(/\s+/g, ' ').trim();
+      const m = blob.match(/([A-Z]{3})\s*([\d,.]+)/);
+      return m ? `${m[1]} ${m[2]}` : blob;
     };
 
-    const upgrade = this.page
-      .locator('a, button')
-      .filter({ hasText: /Upgrade/i })
-      .filter({ visible: true })
-      .first();
+    const readTotal = async () => {
+      const fromDom = await this.page.evaluate(() => {
+        const amt = document.querySelector(
+          '#bookingsummarysection .total-amt, #minicart-bookingsummarysection .total-amt, .summary-content .total-amt, .total-amt',
+        );
+        const amtText = (amt && (amt.innerText || amt.textContent || '')) || '';
+        if (/\d/.test(amtText)) return amtText.trim();
+        const sticky = Array.from(document.querySelectorAll('body *')).find(
+          (el) =>
+            /Subtotal/i.test(el.textContent || '') &&
+            /[A-Z]{3}/.test(el.textContent || '') &&
+            (el.textContent || '').length < 80,
+        );
+        return (sticky && (sticky.textContent || '').trim()) || '';
+      });
+      return String(fromDom || '').replace(/\s+/g, ' ').trim();
+    };
 
-    const cartUpgrade = this.page
-      .locator('#cartmodal')
-      .locator('a, button')
-      .filter({ hasText: /Upgrade/i })
-      .filter({ visible: true })
-      .first();
-
-    if (await cartUpgrade.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      console.log('[booking] Clicking Upgrade in mini-cart');
-      await this.waitBeforeTransition();
-      await cartUpgrade.click({ force: true });
-    } else {
-      await closeCart();
-      await expect(upgrade).toBeVisible({ timeout: 60_000 });
-      console.log('[booking] Clicking Upgrade on lounge details');
-      await this.waitBeforeTransition();
-      await upgrade.click({ force: true });
+    const upgrade = this.upgradeToPpfButton();
+    await expect
+      .poll(
+        async () => {
+          await this.#revealUpgradeCta();
+          return upgrade.count();
+        },
+        { timeout: 60_000 },
+      )
+      .toBeGreaterThan(0);
+    await upgrade.scrollIntoViewIfNeeded().catch(() => {});
+    if (!(await upgrade.isVisible({ timeout: 5_000 }).catch(() => false))) {
+      await upgrade
+        .evaluate((el) => {
+          el.classList.remove('hide', 'd-none');
+          el.removeAttribute('hidden');
+          el.style.setProperty('display', '', 'important');
+          el.style.setProperty('visibility', 'visible', 'important');
+          el.scrollIntoView({ block: 'center' });
+        })
+        .catch(() => {});
     }
 
-    await this.settle(1_000);
+    const priceBefore = await readTotal();
+    console.log(`[booking] Total before Upgrade: ${priceBefore || '(not identified)'}`);
 
-    const confirmUpgrade = this.page
-      .locator('.modal.show, .modal.fade.show, [role="dialog"], .modal-content')
-      .filter({ hasText: /Smart choice|upgrade to Plaza Premium First/i })
-      .getByRole('button', { name: /^Confirm$/i })
-      .or(this.page.getByRole('button', { name: /^Confirm$/i }))
-      .or(this.page.locator('button.btn, a.btn').filter({ hasText: /^Confirm$/i }))
-      .filter({ visible: true })
+    await this.waitBeforeTransition();
+    try {
+      await upgrade.click({ force: true, timeout: 8_000 });
+    } catch {
+      await upgrade.evaluate((el) => el.click());
+    }
+    console.log('[booking] Clicked Upgrade (a.upgradetothis) after Reserve Now');
+
+    const modal = this.page.locator('#upgradepopout-0.show, #upgradepopout-0.modal.show, #upgradepopout-0').first();
+    await expect(modal).toBeVisible({ timeout: 20_000 });
+    const confirm = modal
+      .locator('button.btn.btn-primary.confirmupgrade')
+      .filter({ hasText: /Confirm/i })
       .first();
-    await expect(confirmUpgrade).toBeVisible({ timeout: 20_000 });
-    console.log('[booking] Confirming Smart choice Upgrade to Plaza Premium First');
-    await confirmUpgrade.click({ force: true });
-    await this.settle(2_000);
+    await expect(confirm).toBeVisible({ timeout: 15_000 });
+    console.log('[booking] Clicking Confirm on upgrade popup (button.confirmupgrade)');
+    await confirm.click({ force: true });
+    await expect(modal).toBeHidden({ timeout: 30_000 }).catch(() => {});
+    await this.settle(1_500);
+    if (this.isMobile()) {
+      await this.#revealMobileCartAddons();
+    }
 
-    await this.ensureMiniCartCheckOutVisible(20_000).catch(() => {});
-    const bookingSummary = this.page
-      .getByRole('heading', { name: /Booking Summary/i })
-      .locator('xpath=ancestor::*[.//button[normalize-space()="Check Out"] or .//a[normalize-space()="Check Out"]][1]')
-      .or(this.page.locator('#bookingsummarysection, #minicart-bookingsummarysection, .summary-content'));
-    await expect(
-      bookingSummary.getByText(/Plaza Premium First/i).filter({ visible: true }).first(),
-    ).toBeVisible({ timeout: 60_000 });
-    console.log('[booking] Upgrade applied — PPF visible in booking summary');
+    await expect
+      .poll(
+        async () =>
+          this.page.evaluate(() => {
+            const shown = (el) => {
+              if (!el) return false;
+              const st = window.getComputedStyle(el);
+              return st.display !== 'none' && st.visibility !== 'hidden';
+            };
+            const chunks = [];
+            document
+              .querySelectorAll(
+                '#bookingsummarysection, #minicart-bookingsummarysection, .summary-content, #mobileVisit.show, #mobileVisit',
+              )
+              .forEach((el) => {
+                if (shown(el) || el.classList.contains('show')) chunks.push(el.innerText || '');
+              });
+            document.querySelectorAll('h1, h2, h3, h4').forEach((el) => {
+              if (shown(el)) chunks.push(el.innerText || '');
+            });
+            return /Plaza Premium First/i.test(chunks.join('\n'));
+          }),
+        { timeout: 60_000 },
+      )
+      .toBeTruthy();
+    console.log('[booking] Booking Summary shows Plaza Premium First');
+
+    const priceAfter = await readTotal();
+    const beforeAmt = normalizeAmount(priceBefore);
+    const afterAmt = normalizeAmount(priceAfter);
+    console.log(`[booking] Total after Upgrade: ${priceAfter || '(not identified)'}`);
+    if (!beforeAmt || !afterAmt || beforeAmt === afterAmt) {
+      throw new Error(
+        `Booking summary total did not change after Upgrade. Before: "${priceBefore}" After: "${priceAfter}"`,
+      );
+    }
+    console.log(`[booking] Upgrade total changed: ${priceBefore} → ${priceAfter}`);
   }
 
   async clickReserveNow() {

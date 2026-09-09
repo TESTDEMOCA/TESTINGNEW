@@ -222,61 +222,145 @@ class BasePage {
   }
 
   /**
-   * Mini-cart item price / Total must use the currency selected in Language (e.g. HKD not INR).
+   * Fail when listing and/or mini-cart currency is not the Language-selected code.
    */
-  async assertMiniCartCurrency(expectedCurrency) {
+  async assertSelectedCurrency(expectedCurrency, listingPrice, { cart = false } = {}) {
     const expected = String(expectedCurrency || '').trim().toUpperCase();
-    if (!expected) return;
-
-    const alreadyOnCheckout =
-      /guest-checkout|\/checkout(\/|$)/i.test(this.page.url()) ||
-      (await this.page
-        .locator('#Title, #FirstName, #CountryOfResidence')
-        .first()
-        .isVisible({ timeout: 2_000 })
-        .catch(() => false));
-    if (alreadyOnCheckout) {
-      console.log(`[cart] Already on checkout — skip mini-cart currency assert (${expected})`);
-      return;
-    }
-
-    await this.ensureMiniCartCheckOutVisible(30_000);
-
-    const totalEl = this.page
-      .locator('#minicart-bookingsummarysection .total-amt, .summary-content .total-amt, .total-amt')
-      .filter({ hasText: /[\d,.]+/ })
-      .first();
-    const cartEl = this.page
-      .locator('#minicart-bookingsummarysection, .summary-content')
-      .first();
-
-    let blob = '';
-    if (await totalEl.isVisible({ timeout: 8_000 }).catch(() => false)) {
-      blob = ((await totalEl.innerText()) || '').replace(/\s+/g, ' ').trim();
-    }
-    if (!blob && (await cartEl.isVisible({ timeout: 3_000 }).catch(() => false))) {
-      blob = ((await cartEl.innerText()) || '').replace(/\s+/g, ' ').trim();
-    }
-    if (!blob) {
-      throw new Error(`Mini-cart currency not found; expected ${expected}`);
-    }
-
-    const codes = [...blob.matchAll(/\b([A-Z]{3})\s*[\d,.]+/g)].map((m) => m[1].toUpperCase());
-    const symbolOk =
-      (expected === 'HKD' && /HK\$/i.test(blob)) ||
-      (expected === 'USD' && /US\$/i.test(blob)) ||
-      (expected === 'SGD' && /S\$/i.test(blob)) ||
-      (expected === 'MYR' && /\bRM\b/i.test(blob)) ||
-      (expected === 'INR' && /₹/.test(blob));
-    const ok = codes.includes(expected) || new RegExp(`\\b${expected}\\b`).test(blob) || symbolOk;
-    if (!ok) {
+    if (!expected) {
       throw new Error(
-        `Mini-cart currency expected ${expected} after Language selection, got: ${
-          codes.length ? [...new Set(codes)].join(', ') : blob.slice(0, 180)
-        }`,
+        'Select currency (e.g. HKD) before Passes so listing and cart currency can be validated',
       );
     }
-    console.log(`[cart] Mini-cart currency OK: ${expected} (${blob.slice(0, 80)})`);
+    if (listingPrice != null && String(listingPrice).trim() !== '') {
+      const listingCode = this.currencyCodeFromText(listingPrice);
+      if (!listingCode) {
+        throw new Error(`Pass listing currency not found; expected ${expected}`);
+      }
+      if (listingCode !== expected) {
+        throw new Error(
+          `Pass listing currency expected ${expected} after Language selection, got: ${listingCode}`,
+        );
+      }
+      console.log(`[passes] Listing currency OK: ${expected} (${String(listingPrice).slice(0, 40)})`);
+    }
+    if (cart) {
+      await this.assertMiniCartCurrency(expected);
+    }
+  }
+  async assertMiniCartCurrency(expectedCurrency) {
+    const expected = String(expectedCurrency || '').trim().toUpperCase();
+    if (!expected) {
+      throw new Error('Expected currency is required for mini-cart currency validation');
+    }
+
+    const totalAlreadyVisible = await this.page
+      .locator(
+        '#bookingsummarysection .total-amt, #minicart-bookingsummarysection .total-amt, .summary-content .total-amt, .total-amt',
+      )
+      .filter({ visible: true })
+      .filter({ hasText: /[\d,.]+/ })
+      .first()
+      .isVisible({ timeout: 2_000 })
+      .catch(() => false);
+    const mobileTotalReady = await this.mobileConfirmAndProceed()
+      .isVisible({ timeout: 1_000 })
+      .catch(() => false);
+    const onCheckout = /guest-checkout|\/checkout(\/|$)/i.test(this.page.url());
+    if (!totalAlreadyVisible && !mobileTotalReady && !onCheckout) {
+      await this.ensureMiniCartCheckOutVisible(30_000);
+    }
+
+    const parsed = await this.#readVisibleCartTotalCurrency();
+    if (!parsed.code) {
+      console.log(`[cart] Currency not found in: "${parsed.raw}"`);
+      throw new Error(`Mini-cart currency not found; expected ${expected}`);
+    }
+    if (parsed.code !== expected) {
+      console.log(`[cart] Currency mismatch raw total: "${parsed.raw}"`);
+      throw new Error(
+        `Mini-cart currency expected ${expected} after Language selection, got: ${parsed.code}`,
+      );
+    }
+    console.log(`[cart] Mini-cart currency OK: ${expected} (${parsed.raw.slice(0, 80)})`);
+  }
+
+  currencyCodeFromText(text) {
+    const blob = String(text || '').replace(/\s+/g, ' ').trim();
+    const matches = [...blob.matchAll(/\b([A-Z]{3})\s*[\d,.]+/g)];
+    if (matches.length) return matches[matches.length - 1][1].toUpperCase();
+    if (/HK\$/i.test(blob)) return 'HKD';
+    if (/US\$/i.test(blob)) return 'USD';
+    if (/S\$/i.test(blob)) return 'SGD';
+    if (/\bRM\b/i.test(blob)) return 'MYR';
+    if (/₹/.test(blob)) return 'INR';
+    return '';
+  }
+
+  async #readVisibleCartTotalCurrency() {
+    const checkOut = this.upsellMiniCartCheckOutButton()
+      .or(this.bookingSummaryCheckOutButton())
+      .or(this.page.getByRole('button', { name: /^\s*Check Out\s*$/i }))
+      .or(this.mobileConfirmAndProceed())
+      .filter({ visible: true })
+      .first();
+
+    let raw = '';
+    if (await checkOut.isVisible({ timeout: 8_000 }).catch(() => false)) {
+      raw = await checkOut
+        .evaluate((btn) => {
+          let node = btn;
+          for (let i = 0; i < 15 && node && node !== document.body; i += 1) {
+            const text = (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim();
+            if (
+              text.length > 0 &&
+              text.length < 1500 &&
+              /\b[A-Z]{3}\s*[\d,.]+/.test(text) &&
+              /Total|Subtotal|includes applicable/i.test(text)
+            ) {
+              return text;
+            }
+            node = node.parentElement;
+          }
+          return '';
+        })
+        .catch(() => '');
+    }
+    if (!raw) {
+      raw = await this.page.evaluate(() => {
+        const visible = (el) => {
+          if (!el) return false;
+          const st = window.getComputedStyle(el);
+          if (st.display === 'none' || st.visibility === 'hidden') return false;
+          const r = el.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+        };
+        const pick = (selector) =>
+          Array.from(document.querySelectorAll(selector)).find(
+            (el) => visible(el) && /\d/.test(el.innerText || el.textContent || ''),
+          );
+        const el =
+          pick('#minicart-bookingsummarysection .total-amt') ||
+          pick('#bookingsummarysection .total-amt');
+        return (el && (el.innerText || el.textContent || '').trim()) || '';
+      });
+    }
+
+    const blob = String(raw || '').replace(/\s+/g, ' ').trim();
+    const totalLine = blob.match(/Total[^\dA-Z]{0,40}([A-Z]{3})\s*[\d,.]+/i);
+    const matches = [...blob.matchAll(/\b([A-Z]{3})\s*[\d,.]+/g)];
+    let code = totalLine
+      ? totalLine[1].toUpperCase()
+      : matches.length
+        ? matches[matches.length - 1][1].toUpperCase()
+        : '';
+    if (!code) {
+      if (/HK\$/i.test(blob)) code = 'HKD';
+      else if (/US\$/i.test(blob)) code = 'USD';
+      else if (/S\$/i.test(blob)) code = 'SGD';
+      else if (/\bRM\b/i.test(blob)) code = 'MYR';
+      else if (/₹/.test(blob)) code = 'INR';
+    }
+    return { raw: blob.slice(0, 240), code };
   }
 
   async settle(ms = BasePage.AFTER_SELECT_SETTLE_MS) {

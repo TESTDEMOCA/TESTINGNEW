@@ -17,13 +17,13 @@ When('I click on the Passes on the top menu', async function () {
 
 Then('i select the member only pass from the list of passes', async function () {
   this.smartTravellerPassFlow = true;
-  this.passProduct = await passes(this).selectMemberOnlyPass();
+  this.passProduct = await passes(this).selectMemberOnlyPass(this.selectedCurrency);
   this.passProducts = [this.passProduct];
 });
 
 Then('I select the member only pass from the list of passes', async function () {
   this.smartTravellerPassFlow = true;
-  this.passProduct = await passes(this).selectMemberOnlyPass();
+  this.passProduct = await passes(this).selectMemberOnlyPass(this.selectedCurrency);
   this.passProducts = [this.passProduct];
 });
 
@@ -33,7 +33,7 @@ Then('login window will open', async function () {
 
 When('I add one pass to the shopping cart', async function () {
   // Captures product name + price and stores on world for confirmation assertion
-  this.passProduct = await passes(this).addFirstPassToCart();
+  this.passProduct = await passes(this).addFirstPassToCart(this.selectedCurrency);
   this.passProducts = [this.passProduct];
 });
 
@@ -44,10 +44,16 @@ When('I close the mini cart and add one more same pass to the shopping cart', as
       ? [this.passProduct]
       : [];
 
-  this.passProducts = await passes(this).closeMiniCartAndAddAnotherPass(existingProducts);
+  this.passProducts = await passes(this).closeMiniCartAndAddAnotherPass(
+    existingProducts,
+    this.selectedCurrency,
+  );
   const paidTotal = await passes(this).captureMiniCartPaidTotal();
   if (paidTotal && this.passProducts[0]) {
     this.passProducts[0].paidPrice = paidTotal;
+  }
+  if (this.selectedCurrency) {
+    await passes(this).assertMiniCartCurrency(this.selectedCurrency);
   }
 });
 
@@ -59,8 +65,8 @@ Then('I verify Confirmation page should be displayed with the same product and p
     return;
   }
   const expected = this.passProducts?.length
-    ? { products: this.passProducts, orderNo: this.orderNo }
-    : { ...(this.passProduct || {}), orderNo: this.orderNo };
+    ? { products: this.passProducts, orderNo: this.orderNo, expectedCurrency: this.selectedCurrency }
+    : { ...(this.passProduct || {}), orderNo: this.orderNo, expectedCurrency: this.selectedCurrency };
 
   await passes(this).verifyConfirmationDetails(expected);
 

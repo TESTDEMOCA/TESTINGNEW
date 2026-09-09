@@ -504,20 +504,49 @@ class LmsPage extends BasePage {
     const outletSearch = this.#outletSearchInput(menu);
     await expect(outletSearch).toBeVisible({ timeout: 15_000 });
     await outletSearch.click({ force: true, timeout: 5_000 });
-    await outletSearch.fill('');
-    await outletSearch.fill(wanted, { timeout: 5_000 });
-    await outletSearch.dispatchEvent('input');
-    await expect(outletSearch).toHaveValue(wanted, { timeout: 5_000 });
-    console.log(`[lms] Pasted captured outlet: ${wanted}`);
 
-    const item = menu
-      .getByTitle(wanted, { exact: true })
-      .or(menu.locator('a.dropdown-item').filter({ hasText: new RegExp(`^\\s*${escapeRegExp(wanted)}\\s*$`) }))
-      .or(menu.locator('a.dropdown-item').filter({ hasText: wanted }))
-      .first();
-    await expect(item).toBeVisible({ timeout: 15_000 });
-    await item.scrollIntoViewIfNeeded().catch(() => {});
-    await item.click({ force: true, timeout: 8_000 });
+    const gateNum = (wanted.match(/G\s*(\d+)/i) || [])[1] || '';
+    const searchQuery =
+      (wanted.match(/PPF\s*-\s*G\d+.*$/i) || [])[0] ||
+      (gateNum ? `G${gateNum}` : wanted.replace(/^HKG\s*-\s*/i, ''));
+
+    const typeAndEnter = async (query) => {
+      await outletSearch.fill('');
+      await outletSearch.fill(query, { timeout: 5_000 });
+      await outletSearch.dispatchEvent('input');
+      await outletSearch.press('Enter');
+      console.log(`[lms] Searched outlet + Enter: ${query} (wanted ${wanted})`);
+      await this.page.waitForTimeout(800);
+    };
+
+    await typeAndEnter(searchQuery);
+    try {
+      await this.#clickOutletItem(menu, wanted, gateNum);
+    } catch {
+      const fallback = gateNum ? `G${gateNum}` : 'PPF';
+      await typeAndEnter(fallback);
+      const clicked = await this.page.evaluate((wantRaw) => {
+        const normalize = (s) => (s || '').replace(/\s+/g, ' ').trim();
+        const want = normalize(wantRaw);
+        const nodes = Array.from(
+          document.querySelectorAll('.dropdown-menu.outlet-dropdown-menu a.dropdown-item'),
+        );
+        const match = nodes.find((el) => {
+          const title = normalize(el.getAttribute('title'));
+          const text = normalize(el.textContent);
+          return title === want || text === want || text.includes(want) || title.includes(want);
+        });
+        if (match) {
+          match.click();
+          return { ok: true, text: normalize(match.textContent) };
+        }
+        return { ok: false, texts: nodes.slice(0, 15).map((el) => normalize(el.textContent)) };
+      }, wanted);
+      console.log(`[lms] Outlet DOM click fallback: ${JSON.stringify(clicked)}`);
+      if (!clicked?.ok) {
+        throw new Error(`LMS outlet "${wanted}" not found after search "${searchQuery}"`);
+      }
+    }
     console.log(`[lms] Selected outlet: ${wanted}`);
 
     await this.#waitForFetchingBookingsGone();
