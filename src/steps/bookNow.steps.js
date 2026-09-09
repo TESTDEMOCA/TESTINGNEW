@@ -146,7 +146,7 @@ When('I click Check Out on Book Now flow', async function () {
   const pageObj = bookNow(this);
 
   if (pageObj.isMobile()) {
-    console.log('[checkout] Mobile Check Out uses Confirm & Proceed — skip mini-cart asserts');
+    console.log('[checkout] Mobile Check Out: Confirm & Proceed (lounge) or mini-cart Check Out (passes)');
   } else {
     if (this.bookNowLocationText) {
       await pageObj.assertMiniCartLocationMatches(this.bookNowLocationText);

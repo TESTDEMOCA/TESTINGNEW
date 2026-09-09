@@ -93,15 +93,27 @@ class BasePage {
       .first();
   }
 
-  /** Visible Check Out: booking summary first, then mini-cart, then role fallback. */
-  miniCartCheckOutButton() {
+  /**
+   * Mini-cart Check Out (Passes / cart drawer):
+   * <button type="button" class="btn btn-primary fullWidth flat-btn js-minicart-checkout-upsell mb-0"
+   *   data-guest-checkout-url="/en-uk/guest-checkout">Check Out</button>
+   */
+  upsellMiniCartCheckOutButton() {
     return this.page
-      .locator(BasePage.BOOKING_SUMMARY_CHECKOUT_SELECTOR)
+      .locator(
+        'button.btn.btn-primary.fullWidth.flat-btn.js-minicart-checkout-upsell[data-guest-checkout-url="/en-uk/guest-checkout"]',
+      )
       .filter({ hasText: /^\s*Check Out\s*$/i })
+      .first();
+  }
+
+  /** Visible Check Out: mini-cart upsell first, then booking summary, then role fallback. */
+  miniCartCheckOutButton() {
+    return this.upsellMiniCartCheckOutButton()
       .or(
         this.page
-          .locator(BasePage.MINICART_CHECKOUT_SELECTOR)
-          .filter({ hasText: /^Check Out$/i }),
+          .locator(BasePage.BOOKING_SUMMARY_CHECKOUT_SELECTOR)
+          .filter({ hasText: /^\s*Check Out\s*$/i }),
       )
       .or(this.page.getByRole('button', { name: /^Check Out$/i }))
       .filter({ visible: true })
@@ -113,9 +125,15 @@ class BasePage {
    * Passes / exclusive-login flows often leave the cart closed after modal login.
    */
   async ensureMiniCartCheckOutVisible(timeoutMs = 45_000) {
+    const upsell = this.upsellMiniCartCheckOutButton();
+    if (await upsell.isVisible({ timeout: 1_500 }).catch(() => false)) {
+      console.log('[cart] Mini-cart Check Out is visible (js-minicart-checkout-upsell)');
+      return upsell;
+    }
+
     if (this.isMobile()) {
       const confirm = this.mobileConfirmAndProceed();
-      if (await confirm.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      if (await confirm.isVisible({ timeout: 1_000 }).catch(() => false)) {
         console.log('[checkout] Mobile Confirm & Proceed is visible — skip mini-cart Check Out');
         return confirm;
       }

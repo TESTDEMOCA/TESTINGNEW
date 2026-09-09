@@ -1203,28 +1203,48 @@ class BookNowPage extends BasePage {
     await this.#clickCheckOutDesktop();
   }
 
-  /** Mobile Book Now: Confirm & Proceed — not mini-cart Check Out. */
+  /**
+   * Mobile Check Out:
+   * - Passes / cart: button.js-minicart-checkout-upsell Check Out
+   * - Book Now lounge: Confirm & Proceed (a.mobile-reserve-now-btn)
+   */
   async #clickCheckOutMobile() {
     await this.dismissBlockingOverlays();
-    const confirm = this.page
-      .locator('a.btn.btn-primary.bookingBtn.mobile.mobile-reserve-now-btn')
-      .filter({ hasText: /Confirm\s*&\s*Proceed/i })
-      .or(this.mobileConfirmAndProceed())
-      .first();
-    if (
-      !(await confirm.isVisible({ timeout: 8_000 }).catch(() => false)) &&
-      (await confirm.count().catch(() => 0)) === 0
-    ) {
-      throw new Error(
-        'Mobile Confirm & Proceed not found (a.btn.btn-primary.bookingBtn.mobile.mobile-reserve-now-btn)',
+    const upsell = this.upsellMiniCartCheckOutButton();
+    if (await upsell.isVisible({ timeout: 8_000 }).catch(() => false)) {
+      console.log(
+        '[checkout] Clicking mini-cart Check Out (button.js-minicart-checkout-upsell)',
       );
+      const guestUrl = await upsell.getAttribute('data-guest-checkout-url');
+      await upsell.scrollIntoViewIfNeeded().catch(() => {});
+      await upsell.evaluate((el) => el.click()).catch(async () => {
+        await upsell.click({ force: true, timeout: 15_000 });
+      });
+      const leftListing = await this.page
+        .waitForURL(/guest-checkout|\/checkout(\/|$)/i, { timeout: 20_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (!leftListing && guestUrl) {
+        console.log(`[checkout] Still on listing after Check Out click — opening ${guestUrl}`);
+        await this.page.goto(new URL(guestUrl, this.page.url()).href, {
+          waitUntil: 'domcontentloaded',
+        });
+      }
+    } else if (await this.mobileConfirmAndProceed().isVisible({ timeout: 5_000 }).catch(() => false)) {
+      console.log('[checkout] Clicking mobile Confirm & Proceed (a.mobile-reserve-now-btn)');
+      await this.clickMobileConfirmAndProceed();
+      await this.page.waitForURL(/guest-checkout|\/checkout(\/|$)/i, { timeout: 90_000 });
+    } else {
+      const checkOut = await this.ensureMiniCartCheckOutVisible(45_000);
+      console.log('[checkout] Clicking fallback Check Out');
+      await checkOut.click({ force: true, timeout: 15_000 }).catch(async () => {
+        await checkOut.evaluate((el) => el.click());
+      });
+      await this.page.waitForURL(/guest-checkout|\/checkout(\/|$)/i, { timeout: 90_000 });
     }
-    console.log('[checkout] Clicking mobile Confirm & Proceed (a.mobile-reserve-now-btn)');
-    await this.clickMobileConfirmAndProceed();
-    await this.page.waitForURL(/guest-checkout|\/checkout(\/|$)/i, { timeout: 90_000 }).catch(() => {});
     await expect(
       this.page
-        .locator('#guestcheckoutbutton, #AgreePrivacyGuest, #Title, #FirstName, #CountryOfResidence')
+        .locator('#userLogin.show, #guestcheckoutbutton, #AgreePrivacyGuest, #Title, #FirstName, #CountryOfResidence')
         .first(),
     ).toBeVisible({ timeout: 90_000 });
     console.log(`[checkout] Reached ${this.page.url()}`);
