@@ -1,0 +1,13 @@
+{
+  "files.associations": {
+    "*.feature": "cucumber"
+  },
+  "cucumberautocomplete.steps": [
+    "src/steps/*.js",
+    "src/steps/**/*.js"
+  ],
+  "cucumberautocomplete.syncfeatures": "features/**/*.feature",
+  "cucumberautocomplete.strictGherkinCompletion": true,
+  "cucumberautocomplete.smartSnippets": true,
+  "cucumberautocomplete.stepsInRelativePaths": true
+}
