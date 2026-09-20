@@ -1,0 +1,21 @@
+{
+  "name": "financing-go-playwright-bdd",
+  "private": true,
+  "scripts": {
+    "bddgen": "bddgen",
+    "test": "bddgen && playwright test",
+    "test:headed": "bddgen && playwright test --headed",
+    "test:login": "bddgen && playwright test --grep @login",
+    "test:rerate": "bddgen && playwright test --grep @rerate",
+    "test:end-date": "bddgen && playwright test --grep @end-date",
+    "test:update": "bddgen && playwright test --grep @update-account-setup",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^22.20.2",
+    "dotenv": "^17.4.2",
+    "playwright-bdd": "^9.2.1",
+    "typescript": "~5.9.2"
+  }
+}

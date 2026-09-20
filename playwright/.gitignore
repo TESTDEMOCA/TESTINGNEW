@@ -1,0 +1,14 @@
+node_modules/
+.features-gen/
+test-results/
+playwright-report/
+cucumber-report/
+playwright/.cache/
+.run-state.json
+blob-report/
+.env
+.cursor/*
+.github/*
+.cursor/
+.github/
+.DS_Store
