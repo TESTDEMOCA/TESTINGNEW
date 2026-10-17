@@ -1,10 +1,10 @@
 import { commonSteps } from '../src/steps/common.steps';
 import { expect, test } from '../fixtures/test.fixture';
 
-test('opens the configured home page', async ({ homePage, page }) => {
-  await homePage.open();
+test('opens example.com through reusable navigation', async ({ page, actions }) => {
+  await actions.navigate('https://example.com');
   await expect(page).toHaveTitle(/Example Domain/);
-  await homePage.expectLoaded();
+  await expect(page.getByRole('link', { name: 'Learn more' })).toBeVisible();
 });
 
 test('reusable actions fill, click, and assert', async ({ page, actions }) => {

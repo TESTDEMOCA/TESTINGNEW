@@ -69,7 +69,7 @@ export class BrowserManager {
     return new UiActions(this.requirePage());
   }
 
-  async goto(url: string = env.baseUrl): Promise<void> {
+  async goto(url: string = env.launchUrl): Promise<void> {
     logger.step(`goto >> ${url}`);
     await this.requirePage().goto(url, { waitUntil: 'domcontentloaded', timeout: env.timeout });
   }

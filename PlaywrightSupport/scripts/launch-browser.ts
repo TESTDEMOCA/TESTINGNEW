@@ -7,7 +7,7 @@ async function main(): Promise<void> {
 
   try {
     const page = await manager.launch();
-    await manager.goto(env.baseUrl);
+    await manager.goto(env.launchUrl);
     logger.info(`title: ${await page.title()}`);
     logger.info(`url: ${page.url()}`);
     await manager.screenshot('launch');

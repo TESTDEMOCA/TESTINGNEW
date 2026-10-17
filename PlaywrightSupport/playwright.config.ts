@@ -4,6 +4,7 @@ import { env } from './src/config/env.config';
 
 export default defineConfig({
   testDir: './features',
+  testMatch: '**/*.spec.ts',
   timeout: env.timeout,
   expect: { timeout: 10_000 },
   fullyParallel: true,

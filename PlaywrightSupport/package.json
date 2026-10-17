@@ -11,9 +11,11 @@
     "test:ui": "playwright test --ui",
     "report": "playwright show-report",
     "launch": "tsx scripts/launch-browser.ts",
+    "test:feature": "cucumber-js",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@cucumber/cucumber": "^12.2.0",
     "@playwright/test": "^1.56.1",
     "@types/node": "^22.19.1",
     "dotenv": "^16.6.1",

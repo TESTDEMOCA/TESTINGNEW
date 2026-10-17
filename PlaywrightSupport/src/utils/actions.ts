@@ -31,7 +31,7 @@ export class UiActions {
     return this.page.getByPlaceholder(text);
   }
 
-  async navigate(url: string = env.baseUrl): Promise<void> {
+  async navigate(url: string = env.launchUrl): Promise<void> {
     logger.step(`navigate >> ${url}`);
     await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: env.timeout });
   }

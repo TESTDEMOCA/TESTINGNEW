@@ -20,8 +20,22 @@ function browserName(value: string | undefined): BrowserName {
   return 'chromium';
 }
 
+function required(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`${name} is missing. Set it in .env`);
+  }
+  return value;
+}
+
+const baseUrl = required('BASE_URL').replace(/\/$/, '');
+const rawPath = process.env.APP_PATH?.trim() || '/';
+const appPath = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+
 export const env = {
-  baseUrl: process.env.BASE_URL?.trim() || 'https://example.com',
+  baseUrl,
+  appPath,
+  launchUrl: new URL(appPath, `${baseUrl}/`).href,
   browser: browserName(process.env.BROWSER),
   channel: process.env.BROWSER_CHANNEL?.trim() || undefined,
   headless: bool(process.env.HEADLESS, true),
