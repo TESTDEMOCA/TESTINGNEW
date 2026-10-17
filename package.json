@@ -1,0 +1,25 @@
+{
+  "name": "playwright-support",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright framework with a shared browser launcher and reusable UI helpers",
+  "scripts": {
+    "test": "playwright test --project=chromium",
+    "test:headed": "HEADLESS=false playwright test --project=chromium --headed",
+    "test:firefox": "playwright test --project=firefox",
+    "test:webkit": "playwright test --project=webkit",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "launch": "tsx scripts/launch-browser.ts",
+    "test:feature": "cucumber-js",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "^12.2.0",
+    "@playwright/test": "^1.56.1",
+    "@types/node": "^22.19.1",
+    "dotenv": "^16.6.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
